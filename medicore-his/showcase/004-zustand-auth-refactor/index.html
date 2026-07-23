@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MediCore — Global State Refactor (Showcase)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --primary: 221.2 83.2% 53.3%;
+      --muted: 210 40% 96.1%;
+      --muted-foreground: 215.4 16.3% 46.9%;
+      --border: 214.3 31.8% 91.4%;
+    }
+    body { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    
+    .flash {
+      animation: reRenderFlash 0.5s ease-out;
+    }
+
+    @keyframes reRenderFlash {
+      0% { background-color: rgba(239, 68, 68, 0.3); outline: 2px solid red; }
+      100% { background-color: transparent; outline: 2px solid transparent; }
+    }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900 h-screen flex flex-col items-center py-12">
+  
+  <header class="text-center mb-10 space-y-2">
+    <span class="inline-block bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">🏥 MediCore HIS — Core Architecture</span>
+    <h1 class="text-3xl font-bold tracking-tight">Zustand vs React Context</h1>
+    <p class="text-gray-500 max-w-lg mx-auto">Demonstrating how migrating the global Auth/Facility state out of the React DOM tree removes aggressive re-renders.</p>
+  </header>
+
+  <div class="flex gap-8 w-full max-w-4xl">
+    
+    <!-- LEGACY: React Context -->
+    <div class="flex-1 bg-white border border-gray-200 rounded-xl shadow-sm p-6 space-y-6" id="context-wrapper">
+      <div class="border-b pb-4">
+        <h2 class="text-lg font-bold text-red-600">Legacy: React.createContext()</h2>
+        <p class="text-xs text-gray-500">Every component rerenders when `<AuthProvider>` changes.</p>
+      </div>
+
+      <div class="space-y-4">
+        <!-- LEARN: The entire tree wraps here -->
+        <div class="p-4 border border-dashed border-red-300 rounded bg-red-50/30 transition-colors react-tree">
+          <p class="text-xs font-semibold text-red-400 mb-2">&lt;Layout&gt; (Unrelated Component)</p>
+          
+          <div class="p-4 border rounded bg-white shadow-sm transition-colors react-tree mb-4">
+            <p class="text-xs font-semibold text-gray-400 mb-2">&lt;PatientTable&gt; (Heavy Component)</p>
+            <div class="h-16 bg-gray-100 rounded flex items-center justify-center text-sm text-gray-400">Loading 500 rows... (Flashes on render)</div>
+          </div>
+
+          <div class="p-4 border rounded bg-white shadow-sm transition-colors react-tree">
+            <p class="text-xs font-semibold text-gray-400 mb-2">&lt;FacilitySwitcher&gt;</p>
+            <p class="text-sm font-medium mb-3">Active: <span id="ctx-active-facility" class="text-blue-600">Main Hospital</span></p>
+            <button onclick="triggerContextRerender()" class="w-full py-2 bg-gray-900 text-white rounded text-sm font-medium hover:bg-gray-800 transition">Switch Facility</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODERN: Zustand -->
+    <div class="flex-1 bg-white border border-gray-200 rounded-xl shadow-sm p-6 space-y-6">
+      <div class="border-b pb-4">
+        <h2 class="text-lg font-bold text-blue-600">Modern: Zustand Store</h2>
+        <p class="text-xs text-gray-500">Re-renders mathematically bypassed. Only subscribed nodes update.</p>
+      </div>
+
+      <div class="space-y-4">
+        <!-- LEARN: No wrapper needed -->
+        <div class="p-4 border border-dashed border-blue-300 rounded bg-blue-50/30 transition-colors">
+          <p class="text-xs font-semibold text-blue-400 mb-2">&lt;Layout&gt; (Safe)</p>
+          
+          <div class="p-4 border rounded bg-white shadow-sm transition-colors mb-4">
+            <p class="text-xs font-semibold text-gray-400 mb-2">&lt;PatientTable&gt; (Safe)</p>
+            <div class="h-16 bg-gray-100 rounded flex items-center justify-center text-sm text-gray-400">Loading 500 rows... (Never flashes)</div>
+          </div>
+
+          <div class="p-4 border rounded bg-white shadow-sm transition-colors zustand-node" id="zustand-switcher">
+            <p class="text-xs font-semibold text-gray-400 mb-2">&lt;FacilitySwitcher&gt; (Subscribed)</p>
+            <p class="text-sm font-medium mb-3">Active: <span id="z-active-facility" class="text-blue-600">Main Hospital</span></p>
+            <button onclick="triggerZustandUpdate()" class="w-full py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 transition">Switch Facility</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer class="mt-12 text-center text-sm text-gray-400 space-y-1">
+    <p>Simulating React DOM Trees. Built by <strong>Oussama Zaki</strong> · MediCore HIS</p>
+  </footer>
+
+  <script>
+    const facilities = ["Main Hospital", "Downtown Clinic", "North Wing Pharmacy"];
+    let ctxIndex = 0;
+    let zIndex = 0;
+
+    function triggerContextRerender() {
+      ctxIndex = (ctxIndex + 1) % facilities.length;
+      document.getElementById('ctx-active-facility').innerText = facilities[ctxIndex];
+      
+      // Flash ALL elements because React Context forces a top-down tree diff!
+      document.querySelectorAll('.react-tree').forEach(el => {
+        el.classList.remove('flash');
+        void el.offsetWidth; // trigger reflow
+        el.classList.add('flash');
+      });
+    }
+
+    function triggerZustandUpdate() {
+      zIndex = (zIndex + 1) % facilities.length;
+      document.getElementById('z-active-facility').innerText = facilities[zIndex];
+      
+      // Only flash the explicitly subscribed node!
+      const el = document.getElementById('zustand-switcher');
+      el.classList.remove('flash');
+      void el.offsetWidth;
+      el.classList.add('flash');
+    }
+  </script>
+</body>
+</html>

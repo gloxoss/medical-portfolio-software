@@ -1,0 +1,563 @@
+// MediCore HIS — Prisma Schema (PostgreSQL)
+// Source of truth: pre-dev/05-ERD.md
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Organization (Tenant root) ───────────────────────────────────────────────
+model Organization {
+  id                   String    @id @default(cuid())
+  name                 String
+  slug                 String    @unique
+  logoUrl              String?   @map("logo_url")
+  mrnPrefix            String    @map("mrn_prefix")
+  mrnCounter           Int       @default(0) @map("mrn_counter")
+  invoiceCounter       Int       @default(0) @map("invoice_counter")
+  plan                 OrgPlan   @default(SOLO)
+  status               OrgStatus @default(TRIAL)
+  trialEndsAt          DateTime? @map("trial_ends_at")
+  stripeCustomerId     String?   @unique @map("stripe_customer_id")
+  stripeSubscriptionId String?   @unique @map("stripe_subscription_id")
+  settings             Json?
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  facilities           Facility[]
+  users                User[]
+  services             Service[]
+  taxConfigs           TaxConfig[]
+  invoices             Invoice[]
+  labOrders            LabOrder[]
+  patientConsents      PatientConsent[]
+  portalPatientSettings PortalPatientSetting[]
+  portalPrivacyRequests PortalPrivacyRequest[]
+  onboardingState      OnboardingState?
+  NotificationTemplate NotificationTemplate[]
+  drugs                Drug[]
+  pharmacyInventory    PharmacyInventory[]
+  suppliers            Supplier[]
+  purchaseOrders       PurchaseOrder[]
+
+  @@map("organizations")
+}
+
+// ─── Facility ─────────────────────────────────────────────────────────────────
+model Facility {
+  id        String         @id @default(cuid())
+  orgId     String         @map("org_id")
+  name      String
+  address   Json?
+  phone     String?
+  email     String?
+  settings  Json?
+  status    FacilityStatus @default(ACTIVE)
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+
+  org       Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  userRoles UserFacilityRole[]
+  schedules DoctorSchedule[]
+  invoices  Invoice[]
+  labOrders LabOrder[]
+  pharmacyInventory PharmacyInventory[]
+  purchaseOrders PurchaseOrder[]
+
+  @@map("facilities")
+}
+
+// ─── User ─────────────────────────────────────────────────────────────────────
+model User {
+  id                String     @id @default(cuid())
+  email             String     @unique
+  passwordHash      String     @map("password_hash")
+  orgId             String     @map("org_id")
+  nameFirst         String     @map("name_first")
+  nameLast          String     @map("name_last")
+  phone             String?
+  isSuperAdmin      Boolean    @default(false) @map("is_super_admin")
+  status            UserStatus @default(ACTIVE)
+  doctorSpecialties String[]   @map("doctor_specialties")
+  doctorLicenseNo   String?    @map("doctor_license_no")
+  doctorConsultFee  Decimal?   @map("doctor_consult_fee")
+  createdAt         DateTime   @default(now()) @map("created_at")
+  updatedAt         DateTime   @updatedAt @map("updated_at")
+
+  org             Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  facilityRoles   UserFacilityRole[]
+  refreshTokens   RefreshToken[]
+  invoicesCreated Invoice[]          @relation("InvoiceCreator")
+  labOrdersPlaced LabOrder[]         @relation("LabOrderOrderedBy")
+  onboardingUpdates OnboardingState[] @relation("OnboardingStateLastUpdatedBy")
+
+  @@map("users")
+}
+
+// ─── UserFacilityRole (junction) ──────────────────────────────────────────────
+model UserFacilityRole {
+  id         String       @id @default(cuid())
+  userId     String       @map("user_id")
+  facilityId String       @map("facility_id")
+  role       FacilityRole
+  isActive   Boolean      @default(true) @map("is_active")
+  createdAt  DateTime     @default(now()) @map("created_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, facilityId])
+  @@map("user_facility_roles")
+}
+
+// ─── RefreshToken ─────────────────────────────────────────────────────────────
+// Token itself is never stored — only the SHA-256 hash. Prevents token theft
+// from DB compromise. Client holds the raw token in an HttpOnly cookie.
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+// ─── DoctorSchedule ───────────────────────────────────────────────────────────
+model DoctorSchedule {
+  id          String   @id @default(cuid())
+  doctorId    String   @map("doctor_id")
+  facilityId  String   @map("facility_id")
+  dayOfWeek   Int      @map("day_of_week") // 0 = Sunday, 6 = Saturday
+  startTime   String   @map("start_time") // "08:00"
+  endTime     String   @map("end_time") // "17:00"
+  slotMinutes Int      @default(15) @map("slot_minutes")
+  breaks      Json? // [{ start: "12:00", end: "13:00" }]
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@map("doctor_schedules")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+enum OrgPlan {
+  SOLO
+  CLINIC
+  HOSPITAL
+  DIAGNOSTICS
+}
+
+enum OrgStatus {
+  ACTIVE
+  TRIAL
+  SUSPENDED
+  CANCELLED
+}
+
+enum FacilityStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum FacilityRole {
+  ORG_ADMIN
+  FACILITY_ADMIN
+  DOCTOR
+  NURSE
+  RECEPTIONIST
+  LAB_TECH
+  RADIOLOGIST
+  PHARMACIST
+  ACCOUNTANT
+}
+
+enum OnboardingStep {
+  ORG_DETAILS
+  FACILITY_SETUP
+  ADMIN_USER
+  BRANDING
+  GO_LIVE
+}
+
+// ─── Service ──────────────────────────────────────────────────────────────────
+model Service {
+  id        String   @id @default(cuid())
+  orgId     String   @map("org_id")
+  name      String
+  price     Decimal  @db.Decimal(10, 2)
+  currency  String   @default("MAD")
+  category  String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  org          Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  invoiceItems InvoiceItem[]
+
+  @@map("services")
+}
+
+// ─── TaxConfig ────────────────────────────────────────────────────────────────
+model TaxConfig {
+  id        String  @id @default(cuid())
+  orgId     String  @map("org_id")
+  name      String
+  rate      Decimal @db.Decimal(5, 4)
+  inclusive Boolean @default(false)
+  isDefault Boolean @default(false) @map("is_default")
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("tax_configs")
+}
+
+// ─── LabOrder ───────────────────────────────────────────────────────────────
+model LabOrder {
+  id         String         @id @default(cuid())
+  patientId  String         @map("patient_id")
+  encounterId String        @map("encounter_id")
+  orgId      String         @map("org_id")
+  facilityId String         @map("facility_id")
+  orderedBy  String         @map("ordered_by")
+  panelCode  String         @map("panel_code")
+  status     LabOrderStatus @default(PENDING)
+  orderedAt  DateTime       @default(now()) @map("ordered_at")
+  resultedAt DateTime?      @map("resulted_at")
+  notes      String?
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+
+  org      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  facility Facility     @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  orderedByUser User    @relation("LabOrderOrderedBy", fields: [orderedBy], references: [id], onDelete: Restrict)
+
+  @@index([orgId, patientId, orderedAt])
+  @@index([orgId, encounterId, orderedAt])
+  @@index([orgId, facilityId, status])
+  @@map("lab_orders")
+}
+
+// ─── Invoice ──────────────────────────────────────────────────────────────────
+model Invoice {
+  id                    String        @id @default(cuid())
+  orgId                 String        @map("org_id")
+  facilityId            String        @map("facility_id")
+  patientId             String        @map("patient_id")
+  encounterId           String?       @map("encounter_id")
+  invoiceNo             String        @unique @map("invoice_no")
+  status                InvoiceStatus @default(DRAFT)
+  subtotal              Decimal       @default(0) @db.Decimal(10, 2)
+  taxAmount             Decimal       @default(0) @map("tax_amount") @db.Decimal(10, 2)
+  discount              Decimal       @default(0) @db.Decimal(10, 2)
+  total                 Decimal       @default(0) @db.Decimal(10, 2)
+  currency              String        @default("MAD")
+  stripePaymentIntentId String?       @unique @map("stripe_payment_intent_id")
+  cmiTransactionId      String?       @unique @map("cmi_transaction_id")
+  cmiAuthCode           String?       @map("cmi_auth_code")
+  paidAt                DateTime?     @map("paid_at")
+  createdBy             String        @map("created_by")
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
+
+  items    InvoiceItem[]
+  payments Payment[]
+  org      Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  facility Facility      @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  creator  User          @relation("InvoiceCreator", fields: [createdBy], references: [id])
+
+  @@map("invoices")
+}
+
+// ─── InvoiceItem ──────────────────────────────────────────────────────────────
+model InvoiceItem {
+  id          String  @id @default(cuid())
+  invoiceId   String  @map("invoice_id")
+  serviceId   String? @map("service_id")
+  description String
+  quantity    Int     @default(1)
+  unitPrice   Decimal @map("unit_price") @db.Decimal(10, 2)
+  total       Decimal @db.Decimal(10, 2)
+
+  invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  service Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
+  @@map("invoice_items")
+}
+
+// ─── Payment ──────────────────────────────────────────────────────────────────
+model Payment {
+  id        String        @id @default(cuid())
+  invoiceId String        @map("invoice_id")
+  amount    Decimal       @db.Decimal(10, 2)
+  method    PaymentMethod
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  VOID
+}
+
+enum LabOrderStatus {
+  PENDING
+  COLLECTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  STRIPE
+  CMI
+  BANK_TRANSFER
+  INSURANCE
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  RECEIVED
+}
+
+enum PatientConsentType {
+  PORTAL_TERMS
+  AI_AMBIENT_AUDIO
+}
+
+enum PortalPrivacyRequestType {
+  DATA_EXPORT
+  ACCOUNT_DELETION
+}
+
+enum PortalPrivacyRequestStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+
+// ─── PatientConsent ──────────────────────────────────────────────────────────
+model PatientConsent {
+  id          String            @id @default(cuid())
+  patientId   String            @map("patient_id")
+  orgId       String            @map("org_id")
+  consentType PatientConsentType @map("consent_type")
+  granted     Boolean           @default(false)
+  grantedAt   DateTime?         @map("granted_at")
+  revokedAt   DateTime?         @map("revoked_at")
+  ipAddress   String?           @map("ip_address")
+  userAgent   String?           @map("user_agent")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, orgId, consentType])
+  @@index([orgId, patientId, consentType])
+  @@map("patient_consents")
+}
+
+// ─── PortalPatientSetting ──────────────────────────────────────────────────
+model PortalPatientSetting {
+  id                 String   @id @default(cuid())
+  patientId          String   @map("patient_id")
+  orgId              String   @map("org_id")
+  smsNotifications   Boolean  @default(true) @map("sms_notifications")
+  emailNotifications Boolean  @default(true) @map("email_notifications")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, orgId])
+  @@index([orgId, patientId])
+  @@map("portal_patient_settings")
+}
+
+// ─── PortalPrivacyRequest ──────────────────────────────────────────────────
+model PortalPrivacyRequest {
+  id          String                    @id @default(cuid())
+  patientId   String                    @map("patient_id")
+  orgId       String                    @map("org_id")
+  requestType PortalPrivacyRequestType  @map("request_type")
+  status      PortalPrivacyRequestStatus @default(QUEUED)
+  reason      String?
+  requestedAt DateTime                  @default(now()) @map("requested_at")
+  processedAt DateTime?                 @map("processed_at")
+  createdAt   DateTime                  @default(now()) @map("created_at")
+  updatedAt   DateTime                  @updatedAt @map("updated_at")
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, patientId, requestType, status])
+  @@index([orgId, requestedAt])
+  @@map("portal_privacy_requests")
+}
+
+// ─── OnboardingState ───────────────────────────────────────────────────────
+model OnboardingState {
+  orgId          String         @id @map("org_id")
+  step           OnboardingStep
+  completedSteps String[]       @default([]) @map("completed_steps")
+  skippedSteps   String[]       @default([]) @map("skipped_steps")
+  completedAt    DateTime?      @map("completed_at")
+  lastUpdatedBy  String         @map("last_updated_by")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  org     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  updater User         @relation("OnboardingStateLastUpdatedBy", fields: [lastUpdatedBy], references: [id], onDelete: Restrict)
+
+  @@index([lastUpdatedBy])
+  @@map("onboarding_states")
+}
+
+// ─── NotificationTemplate ─────────────────────────────────────────────────────
+model NotificationTemplate {
+  id        String   @id @default(cuid())
+  orgId     String   @map("org_id")
+  event     String
+  channel   String   @default("sms") // "sms" | "email"
+  language  String   @default("fr")
+  subject   String?
+  body      String // Jinja2 template
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("notification_templates")
+}
+
+// ─── Pharmacy (Phase 2) ────────────────────────────────────────────────────
+model Drug {
+  id           String   @id @default(cuid())
+  orgId        String   @map("org_id")
+  name         String
+  genericName  String?  @map("generic_name")
+  form         String
+  strength     String
+  manufacturer String?
+  category     String?
+  unit         String?
+  price        Decimal  @db.Decimal(10, 2)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  org                Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  inventory          PharmacyInventory[]
+  purchaseOrderItems PurchaseOrderItem[]
+
+  @@unique([orgId, name, form, strength])
+  @@index([orgId, name])
+  @@index([orgId, category])
+  @@map("drugs")
+}
+
+model PharmacyInventory {
+  id           String   @id @default(cuid())
+  orgId        String   @map("org_id")
+  facilityId   String   @map("facility_id")
+  drugId       String   @map("drug_id")
+  batchNumber  String   @map("batch_number")
+  expiryDate   DateTime @map("expiry_date")
+  quantity     Int      @default(0)
+  reorderLevel Int      @default(0) @map("reorder_level")
+  unitCost     Decimal? @map("unit_cost") @db.Decimal(10, 2)
+  unitPrice    Decimal  @map("unit_price") @db.Decimal(10, 2)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  org      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  facility Facility     @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  drug     Drug         @relation(fields: [drugId], references: [id], onDelete: Restrict)
+
+  @@unique([orgId, facilityId, drugId, batchNumber])
+  @@index([orgId, facilityId, drugId, expiryDate])
+  @@index([orgId, facilityId, quantity])
+  @@map("pharmacy_inventory")
+}
+
+model Supplier {
+  id          String   @id @default(cuid())
+  orgId       String   @map("org_id")
+  name        String
+  contactName String?  @map("contact_name")
+  phone       String?
+  email       String?
+  address     Json?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  org            Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  purchaseOrders PurchaseOrder[]
+
+  @@index([orgId, name])
+  @@map("suppliers")
+}
+
+model PurchaseOrder {
+  id         String              @id @default(cuid())
+  orgId      String              @map("org_id")
+  facilityId String              @map("facility_id")
+  supplierId String              @map("supplier_id")
+  status     PurchaseOrderStatus @default(DRAFT)
+  notes      String?
+  createdBy  String              @map("created_by")
+  approvedBy String?             @map("approved_by")
+  approvedAt DateTime?           @map("approved_at")
+  receivedBy String?             @map("received_by")
+  receivedAt DateTime?           @map("received_at")
+  createdAt  DateTime            @default(now()) @map("created_at")
+  updatedAt  DateTime            @updatedAt @map("updated_at")
+
+  org      Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  facility Facility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  supplier Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  items    PurchaseOrderItem[]
+
+  @@index([orgId, facilityId, status, createdAt])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String   @id @default(cuid())
+  purchaseOrderId String   @map("purchase_order_id")
+  drugId          String   @map("drug_id")
+  quantity        Int
+  unitCost        Decimal  @map("unit_cost") @db.Decimal(10, 2)
+  total           Decimal  @db.Decimal(10, 2)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  drug          Drug          @relation(fields: [drugId], references: [id], onDelete: Restrict)
+
+  @@index([purchaseOrderId])
+  @@map("purchase_order_items")
+}

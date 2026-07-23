@@ -1,0 +1,2 @@
+src/billing/billing.service.ts(14,19): error TS2709: Cannot use namespace 'Stripe' as a type.
+src/billing/billing.service.ts(23,21): error TS7009: 'new' expression, whose target lacks a construct signature, implicitly has an 'any' type.

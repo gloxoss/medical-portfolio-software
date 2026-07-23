@@ -1,0 +1,128 @@
+{
+  "title": "Encounter",
+  "collection": "encounters",
+  "description": "The central clinical document. One per visit. Everything that happens clinically — vitals, SOAP, diagnoses, prescriptions, lab orders — lives here or is referenced here.",
+  "indexes": [
+    { "fields": { "org_id": 1, "facility_id": 1, "patient_id": 1, "created_at": -1 } },
+    { "fields": { "org_id": 1, "facility_id": 1, "doctor_id": 1, "status": 1 } },
+    { "fields": { "appointment_id": 1 }, "unique": true }
+  ],
+  "type": "object",
+  "required": ["org_id", "facility_id", "patient_id", "doctor_id", "appointment_id", "status"],
+  "properties": {
+    "_id": { "type": "ObjectId" },
+    "org_id": { "type": "ObjectId" },
+    "facility_id": { "type": "ObjectId" },
+    "patient_id": { "type": "ObjectId" },
+    "doctor_id": { "type": "string", "description": "User.id from PostgreSQL (cuid string)" },
+    "appointment_id": { "type": "ObjectId", "description": "Unique — one encounter per appointment" },
+    "visit_date": { "type": "date", "description": "Denormalized for easy date queries" },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "in_progress", "pending_review", "signed_off", "archived"],
+      "default": "draft",
+      "description": "Only signed_off encounters trigger billing and pharmacy events"
+    },
+    "vitals": {
+      "type": "object",
+      "description": "Partial updates allowed — not all fields required",
+      "properties": {
+        "bp_systolic": { "type": "number", "unit": "mmHg" },
+        "bp_diastolic": { "type": "number", "unit": "mmHg" },
+        "heart_rate": { "type": "number", "unit": "bpm" },
+        "temperature": { "type": "number", "unit": "celsius" },
+        "weight": { "type": "number", "unit": "kg" },
+        "height": { "type": "number", "unit": "cm" },
+        "bmi": { "type": "number", "description": "Computed: weight / (height/100)^2" },
+        "spo2": { "type": "number", "unit": "%" },
+        "rbs": { "type": "number", "unit": "mg/dL", "description": "Random blood sugar" },
+        "recorded_at": { "type": "date" },
+        "recorded_by": { "type": "string", "description": "User.id from PG" }
+      }
+    },
+    "soap": {
+      "type": "object",
+      "description": "SOAP note. Autosaved. Only 'assessment' is required at sign-off.",
+      "properties": {
+        "subjective": { "type": "string", "description": "Patient's reported symptoms, history, complaints" },
+        "objective": { "type": "string", "description": "Physical exam findings, observations, reviewed results" },
+        "assessment": { "type": "string", "description": "REQUIRED at sign-off. Doctor's diagnosis and clinical impression." },
+        "plan": { "type": "string", "description": "Treatment plan, referrals, follow-up instructions" },
+        "last_autosaved_at": { "type": "date" }
+      }
+    },
+    "diagnoses": {
+      "type": "array",
+      "items": {
+        "properties": {
+          "_id": { "type": "ObjectId" },
+          "icd_code": { "type": "string", "example": "J18.9" },
+          "description": { "type": "string", "example": "Pneumonia, unspecified organism" },
+          "type": { "type": "string", "enum": ["primary", "secondary", "differential"], "default": "primary" },
+          "added_by": { "type": "string" },
+          "added_at": { "type": "date" }
+        }
+      }
+    },
+    "prescriptions": {
+      "type": "array",
+      "description": "Drugs prescribed in this encounter. On sign-off, events fire to pharmacy module.",
+      "items": {
+        "properties": {
+          "_id": { "type": "ObjectId" },
+          "drug_id": { "type": "string", "description": "DrugCatalog.id from PG (Phase 2) or free text" },
+          "drug_name": { "type": "string" },
+          "drug_form": { "type": "string", "enum": ["tablet", "capsule", "syrup", "injection", "cream", "drops", "inhaler", "patch", "other"] },
+          "strength": { "type": "string", "example": "500mg" },
+          "dosage_instructions": { "type": "string", "example": "1 tablet" },
+          "frequency": { "type": "string", "example": "TID", "description": "OD/BD/TID/QID/PRN/stat or custom text" },
+          "duration_days": { "type": "number" },
+          "quantity": { "type": "number", "description": "Total units to dispense. Computed if not provided." },
+          "instructions": { "type": "string", "example": "Take after food with a full glass of water" },
+          "status": { "type": "string", "enum": ["issued", "sent_to_pharmacy", "dispensed", "cancelled"], "default": "issued" },
+          "allergy_override": { "type": "boolean", "default": false, "description": "True if doctor confirmed despite allergy warning" }
+        }
+      }
+    },
+    "lab_orders": {
+      "type": "array",
+      "description": "Lab tests ordered. Full data in labs.lab_orders collection (Phase 2). Stored here as references.",
+      "items": {
+        "properties": {
+          "lab_order_id": { "type": "ObjectId", "description": "labs.lab_orders._id" },
+          "test_name": { "type": "string", "description": "Denormalized for display without a join" },
+          "ordered_at": { "type": "date" },
+          "result_status": { "type": "string", "enum": ["pending", "ready", "critical"], "default": "pending" }
+        }
+      }
+    },
+    "radiology_orders": {
+      "type": "array",
+      "description": "Phase 2. Stored here as references when ordered.",
+      "items": {
+        "properties": {
+          "radiology_order_id": { "type": "ObjectId" },
+          "exam_type": { "type": "string", "example": "Chest X-Ray" },
+          "ordered_at": { "type": "date" }
+        }
+      }
+    },
+    "ai_context": {
+      "type": "object",
+      "description": "Metadata about AI suggestions shown during this encounter. Used for quality tracking. Never auto-applied.",
+      "properties": {
+        "summary_shown": { "type": "boolean", "default": false },
+        "differentials_shown": { "type": "array", "items": { "type": "string" } },
+        "investigations_suggested": { "type": "array", "items": { "type": "string" } },
+        "copilot_feedback": { "type": "string", "enum": ["helpful", "not_helpful", "no_feedback"], "default": "no_feedback" }
+      }
+    },
+    "invoice_id": { "type": "string", "description": "Invoice.id from PG — set after billing creates it on sign-off" },
+    "signed_off_at": { "type": "date" },
+    "signed_off_by": { "type": "string", "description": "User.id from PG" },
+    "created_at": { "type": "date" },
+    "updated_at": { "type": "date" },
+    "created_by": { "type": "string" },
+    "updated_by": { "type": "string" }
+  }
+}

@@ -1,0 +1,108 @@
+# MediCore HIS — Local Development Databases
+# Run: pnpm db:up    (from monorepo root)
+# Stop: pnpm db:down
+#
+# Default credentials (dev only — never use these in production):
+#   user: medicore / password: medicore
+
+services:
+  # ─── API (NestJS) ───────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    container_name: medicore-api
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      APP_PORT: 3000
+    ports:
+      - "3001:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/v1/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ─── PostgreSQL 16 ─────────────────────────────────────────────────────────
+  # Financial data, users, appointments, billing — ACID-compliant
+  postgres:
+    image: postgres:16-alpine
+    container_name: medicore-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: medicore
+      POSTGRES_PASSWORD: medicore
+      POSTGRES_DB: medicore_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medicore -d medicore_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ─── MongoDB 7 ─────────────────────────────────────────────────────────────
+  # Clinical documents — encounters (SOAP), patient notes, lab reports
+  mongo:
+    image: mongo:7.0
+    container_name: medicore-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: medicore
+      MONGO_INITDB_ROOT_PASSWORD: medicore
+      MONGO_INITDB_DATABASE: medicore_dev
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test:
+        ["CMD", "mongosh", "--eval", "db.adminCommand('ping')", "--quiet"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ─── Redis 7.2 ─────────────────────────────────────────────────────────────
+  # Session cache, rate limiting, pub/sub event bus, booking locks
+  redis:
+    image: redis:7.2-alpine
+    container_name: medicore-redis
+    restart: unless-stopped
+    command: redis-server --requirepass medicore --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "medicore", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  postgres_data:
+    name: medicore_postgres_data
+  mongo_data:
+    name: medicore_mongo_data
+  redis_data:
+    name: medicore_redis_data
+
+networks:
+  default:
+    name: medicore-network

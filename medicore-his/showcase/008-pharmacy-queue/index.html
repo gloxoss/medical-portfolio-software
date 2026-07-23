@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MediCore — Pharmacy Queue Showcase</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen p-8">
+  <main class="max-w-5xl mx-auto space-y-6">
+    <header class="space-y-2">
+      <span class="inline-block bg-emerald-100 text-emerald-700 text-xs font-semibold px-3 py-1 rounded-full tracking-wide uppercase">
+        MediCore HIS · Step 17 Closure
+      </span>
+      <h1 class="text-3xl font-bold tracking-tight">Pharmacy Dispensing Queue</h1>
+      <p class="text-slate-600 text-sm max-w-3xl">
+        This showcase demonstrates the clinical loop from encounter sign-off to pharmacist action.
+        Queue entries appear, allergy risk is visible, and dispensing completes with stock-safe handling.
+      </p>
+    </header>
+
+    <section class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="flex items-center justify-between p-4 border-b border-slate-200">
+        <h2 class="text-lg font-semibold">Live Queue</h2>
+        <span class="text-xs font-medium text-emerald-700 bg-emerald-100 px-2 py-1 rounded">Auto refresh 10s</span>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left">
+          <thead class="bg-slate-100 text-slate-600 text-xs uppercase tracking-wider">
+            <tr>
+              <th class="p-3">Rx</th>
+              <th class="p-3">Patient</th>
+              <th class="p-3">Drugs</th>
+              <th class="p-3">Status</th>
+              <th class="p-3 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100" id="queue-rows">
+            <tr>
+              <td class="p-3 font-mono text-xs">RX-2026-041</td>
+              <td class="p-3">Ahmed B. · MRN-55312</td>
+              <td class="p-3">
+                Metformin 850mg x60
+                <div class="mt-1 text-xs text-red-700 bg-red-50 inline-flex items-center px-2 py-1 rounded">Allergy alert: Penicillin family</div>
+              </td>
+              <td class="p-3"><span class="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded uppercase">pending</span></td>
+              <td class="p-3 text-right">
+                <button class="bg-blue-600 text-white text-sm px-3 py-1.5 rounded hover:bg-blue-700" onclick="dispense(this)">Dispense</button>
+              </td>
+            </tr>
+            <tr>
+              <td class="p-3 font-mono text-xs">RX-2026-042</td>
+              <td class="p-3">Fatima Z. · MRN-77104</td>
+              <td class="p-3">Amoxicillin 500mg x30</td>
+              <td class="p-3"><span class="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded uppercase">pending</span></td>
+              <td class="p-3 text-right">
+                <button class="bg-blue-600 text-white text-sm px-3 py-1.5 rounded hover:bg-blue-700" onclick="dispense(this)">Dispense</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="bg-white border border-slate-200 rounded-xl p-4">
+      <h3 class="font-semibold mb-2">Learning Notes</h3>
+      <ul class="text-sm text-slate-600 list-disc pl-5 space-y-1">
+        <li>Queue rows map directly to pharmacy events emitted after encounter sign-off.</li>
+        <li>Dispense flow supports FEFO allocation and records allergy warnings to audit logs.</li>
+        <li>Stock changes trigger low-stock events for replenishment workflows.</li>
+      </ul>
+    </section>
+  </main>
+
+  <script>
+    function dispense(button) {
+      button.disabled = true;
+      button.textContent = 'Dispensing...';
+      setTimeout(() => {
+        const row = button.closest('tr');
+        const statusCell = row.children[3];
+        statusCell.innerHTML = '<span class="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded uppercase">completed</span>';
+        button.textContent = 'Done';
+        button.className = 'bg-emerald-600 text-white text-sm px-3 py-1.5 rounded';
+      }, 1200);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+﻿node_modules/
+.env
+*.log
+
+# IDE & System
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+*.swp
+
+# Python Virtual Envs & Caches
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+env/
+
+# PHP Composer & Cache
+vendor/
+**/vendor/
+composer.lock
+
+# Large Binary Exclusions (Detected during onboarding)
+.code-review-graph/graph.db
+medicore-his/node_modules/.pnpm/@next+swc-win32-x64-msvc@14.2.29/node_modules/@next/swc-win32-x64-msvc/next-swc.win32-x64-msvc.node

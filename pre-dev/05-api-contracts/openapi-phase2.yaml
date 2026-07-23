@@ -1,0 +1,1292 @@
+# MediCore HIS — Phase 2 API Contract
+# Extends openapi.yaml (Phase 1). All Phase 1 endpoints remain unchanged.
+# All endpoints require Bearer JWT unless marked [PUBLIC] or [PORTAL] or [INTERNAL].
+
+openapi: "3.1.0"
+info:
+  title: MediCore HIS API — Phase 2
+  version: "2.0.0"
+servers:
+  - url: http://localhost:3001/api/v1
+
+paths:
+  # ─── PATIENT PORTAL AUTH ─────────────────────────
+  /portal/auth/otp/request:
+    post:
+      tags: [Portal Auth]
+      summary: "[PUBLIC] Request OTP for patient login"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, org_id]
+              properties:
+                phone: { type: string, example: "+212600000000" }
+                org_id: { type: string }
+      responses:
+        "200": { description: "OTP sent via SMS" }
+        "429": { description: "Too many OTP requests (max 3/hour)" }
+
+  /portal/auth/otp/verify:
+    post:
+      tags: [Portal Auth]
+      summary: "[PUBLIC] Verify OTP and get patient JWT"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, code, org_id]
+              properties:
+                phone: { type: string }
+                code: { type: string, minLength: 6, maxLength: 6 }
+                org_id: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+                  patient: { type: object }
+                  is_new: { type: boolean }
+        "401": { description: "Invalid or expired OTP" }
+
+  # ─── PATIENT PORTAL ──────────────────────────────
+  /portal/me:
+    get:
+      tags: [Portal]
+      summary: "[PORTAL] Get patient profile"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  patient: { type: object }
+                  upcoming_appointments: { type: array }
+                  unpaid_invoices: { type: array }
+
+  /portal/records:
+    get:
+      tags: [Portal]
+      summary: "[PORTAL] Patient encounter history"
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  encounters: { type: array }
+                  total: { type: integer }
+
+  /portal/records/{encounterId}:
+    get:
+      tags: [Portal]
+      summary: "[PORTAL] Single encounter detail (sanitized for patient)"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  visit_date: { type: string }
+                  doctor_name: { type: string }
+                  vitals: { type: object }
+                  diagnoses: { type: array }
+                  prescriptions: { type: array }
+                  lab_results: { type: array }
+
+  /portal/appointments:
+    get:
+      tags: [Portal]
+      summary: "[PORTAL] Patient's appointments (past + upcoming)"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  upcoming: { type: array }
+                  past: { type: array }
+    post:
+      tags: [Portal]
+      summary: "[PORTAL] Patient self-service booking"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [facility_id, doctor_id, start_time]
+              properties:
+                facility_id: { type: string }
+                doctor_id: { type: string }
+                start_time: { type: string, format: date-time }
+                type: { type: string, default: consultation }
+                notes: { type: string }
+      responses:
+        "201": { description: "Appointment booked" }
+        "409": { description: "Slot taken" }
+
+  /portal/appointments/{id}/cancel:
+    post:
+      tags: [Portal]
+      summary: "[PORTAL] Cancel appointment"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        "200": { description: "Cancelled" }
+        "422": { description: "Cannot cancel past appointments" }
+
+  /portal/invoices:
+    get:
+      tags: [Portal]
+      summary: "[PORTAL] Patient's invoices"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  invoices: { type: array }
+
+  /portal/invoices/{id}/pay:
+    post:
+      tags: [Portal]
+      summary: "[PORTAL] Create Stripe payment for invoice"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  client_secret: { type: string }
+
+  /portal/prescriptions/{encounterId}:
+    get:
+      tags: [Portal]
+      summary: "[PORTAL] Download prescription PDF"
+      responses:
+        "200":
+          description: PDF file
+          content:
+            application/pdf: {}
+
+  /portal/settings:
+    get:
+      tags: [Portal]
+      summary: "[PORTAL] Patient consent + notification settings"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sms_notifications: { type: boolean }
+                  email_notifications: { type: boolean }
+                  ai_consent: { type: boolean }
+    put:
+      tags: [Portal]
+      summary: "[PORTAL] Update consent settings"
+      responses:
+        "200": { description: "Settings updated" }
+
+  /portal/data-export:
+    post:
+      tags: [Portal]
+      summary: "[PORTAL] Request GDPR data export"
+      responses:
+        "202": { description: "Export queued — download link sent via email within 24h" }
+
+  /portal/delete-account:
+    post:
+      tags: [Portal]
+      summary: "[PORTAL] Request account deletion (GDPR Art. 17)"
+      responses:
+        "202": { description: "Deletion request queued — requires admin confirmation" }
+
+  # ─── LAB MODULE ──────────────────────────────────
+  /lab/catalog:
+    get:
+      tags: [Lab]
+      summary: List lab test catalog
+      parameters:
+        - name: category
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string }
+                    name: { type: string }
+                    category: { type: string }
+                    specimen_type: { type: string }
+                    normal_ranges: { type: object }
+                    price: { type: number }
+    post:
+      tags: [Lab]
+      summary: Create lab test definition
+      responses:
+        "201": { description: "Test created" }
+
+  /encounters/{id}/lab-orders:
+    post:
+      tags: [Lab]
+      summary: Create lab order from encounter (DOCTOR only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tests]
+              properties:
+                tests:
+                  type: array
+                  items:
+                    type: object
+                    required: [test_id]
+                    properties:
+                      test_id: { type: string }
+                      notes: { type: string }
+                      urgency: { type: string, enum: [routine, urgent, stat] }
+      responses:
+        "201": { description: "Lab order created" }
+
+  /lab/orders:
+    get:
+      tags: [Lab]
+      summary: Lab orders queue (LAB_TECH, DOCTOR)
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [ordered, specimen_collected, in_progress, completed, authorized] }
+        - name: facility_id
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array }
+                  total: { type: integer }
+
+  /lab/orders/{id}:
+    get:
+      tags: [Lab]
+      summary: Get lab order details with results
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /lab/orders/{id}/specimen:
+    patch:
+      tags: [Lab]
+      summary: Mark specimen collected
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [specimen_id]
+              properties:
+                specimen_id: { type: string }
+      responses:
+        "200": { description: "Specimen collected" }
+
+  /lab/orders/{id}/results:
+    put:
+      tags: [Lab]
+      summary: Enter lab results
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [results]
+              properties:
+                results:
+                  type: array
+                  items:
+                    type: object
+                    required: [test_id, value]
+                    properties:
+                      test_id: { type: string }
+                      value: { type: string }
+                      unit: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results: { type: array }
+                  abnormal_flags: { type: array }
+
+  /lab/orders/{id}/authorize:
+    post:
+      tags: [Lab]
+      summary: Authorize lab results (DOCTOR)
+      responses:
+        "200": { description: "Results authorized — billing event published" }
+
+  /lab/orders/{id}/pdf:
+    get:
+      tags: [Lab]
+      summary: Download lab result PDF
+      responses:
+        "200":
+          content:
+            application/pdf: {}
+
+  # ─── PHARMACY MODULE ────────────────────────────
+  /pharmacy/drugs:
+    get:
+      tags: [Pharmacy]
+      summary: Drug catalog
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+    post:
+      tags: [Pharmacy]
+      summary: Add drug to catalog
+      responses:
+        "201": { description: "Drug added" }
+
+  /pharmacy/inventory:
+    get:
+      tags: [Pharmacy]
+      summary: Pharmacy inventory (stock levels per facility)
+      parameters:
+        - name: facility_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: low_stock_only
+          in: query
+          schema: { type: boolean }
+        - name: expiring_soon
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+
+  /pharmacy/inventory/adjust:
+    post:
+      tags: [Pharmacy]
+      summary: Stock adjustment (receive, write-off, return)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [drug_id, facility_id, type, quantity]
+              properties:
+                drug_id: { type: string }
+                facility_id: { type: string }
+                type: { type: string, enum: [RECEIVE, WRITE_OFF, RETURN, ADJUST] }
+                quantity: { type: integer }
+                batch_number: { type: string }
+                expiry_date: { type: string, format: date }
+                reference: { type: string }
+      responses:
+        "200": { description: "Stock adjusted" }
+
+  /pharmacy/queue:
+    get:
+      tags: [Pharmacy]
+      summary: Pending prescriptions to dispense
+      parameters:
+        - name: facility_id
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+
+  /pharmacy/dispense:
+    post:
+      tags: [Pharmacy]
+      summary: Dispense medication to patient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [patient_id, encounter_id, items]
+              properties:
+                patient_id: { type: string }
+                encounter_id: { type: string }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [drug_id, quantity]
+                    properties:
+                      drug_id: { type: string }
+                      quantity: { type: integer }
+                      batch_number: { type: string }
+      responses:
+        "200": { description: "Dispensed — billing event published" }
+        "422": { description: "Insufficient stock" }
+
+  /pharmacy/suppliers:
+    get:
+      tags: [Pharmacy]
+      summary: Supplier list
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+    post:
+      tags: [Pharmacy]
+      summary: Add supplier
+      responses:
+        "201": { description: "Supplier created" }
+
+  /pharmacy/purchase-orders:
+    get:
+      tags: [Pharmacy]
+      summary: Purchase order list
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+    post:
+      tags: [Pharmacy]
+      summary: Create purchase order
+      responses:
+        "201": { description: "PO created" }
+
+  /pharmacy/purchase-orders/{id}/approve:
+    post:
+      tags: [Pharmacy]
+      summary: Approve purchase order
+      responses:
+        "200": { description: "PO approved" }
+
+  /pharmacy/purchase-orders/{id}/receive:
+    post:
+      tags: [Pharmacy]
+      summary: Mark PO as received — auto-update stock
+      responses:
+        "200": { description: "Stock updated" }
+
+  # ─── TELEMEDICINE ────────────────────────────────
+  /telemedicine/sessions:
+    post:
+      tags: [Telemedicine]
+      summary: Create video session for appointment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [appointment_id]
+              properties:
+                appointment_id: { type: string }
+                recording_enabled: { type: boolean, default: false }
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_id: { type: string }
+                  room_url: { type: string }
+                  doctor_token: { type: string }
+
+  /telemedicine/sessions/{id}:
+    get:
+      tags: [Telemedicine]
+      summary: Get session details (room URL, status)
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /telemedicine/sessions/{id}/join:
+    patch:
+      tags: [Telemedicine]
+      summary: Doctor joins session
+      responses:
+        "200": { description: "Session started" }
+
+  /telemedicine/sessions/{id}/end:
+    post:
+      tags: [Telemedicine]
+      summary: End session — calculate duration — billing event
+      responses:
+        "200": { description: "Session ended" }
+
+  /portal/telemedicine/{sessionId}/join:
+    get:
+      tags: [Portal]
+      summary: "[PORTAL] Patient joins video session"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  room_url: { type: string }
+                  patient_token: { type: string }
+
+  # ─── IPD MODULE ──────────────────────────────────
+  /ipd/wards:
+    get:
+      tags: [IPD]
+      summary: List wards with occupancy stats
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+    post:
+      tags: [IPD]
+      summary: Create ward
+      responses:
+        "201": { description: "Ward created" }
+
+  /ipd/beds:
+    get:
+      tags: [IPD]
+      summary: Bed map (all beds with status)
+      parameters:
+        - name: ward_id
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [AVAILABLE, OCCUPIED, MAINTENANCE] }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+
+  /ipd/admit:
+    post:
+      tags: [IPD]
+      summary: Admit patient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [patient_id, ward_id, bed_id, admission_type]
+              properties:
+                patient_id: { type: string }
+                ward_id: { type: string }
+                bed_id: { type: string }
+                admission_type: { type: string, enum: [elective, emergency, transfer] }
+                admission_reason: { type: string }
+                attending_doctor_id: { type: string }
+                encounter_id: { type: string }
+      responses:
+        "201": { description: "Patient admitted — bed marked OCCUPIED" }
+        "409": { description: "Bed already occupied" }
+
+  /ipd/admissions:
+    get:
+      tags: [IPD]
+      summary: Active admissions list
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+
+  /ipd/admissions/{id}:
+    get:
+      tags: [IPD]
+      summary: Full admission detail (bed history, round notes, vitals, medications)
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /ipd/admissions/{id}/transfer:
+    post:
+      tags: [IPD]
+      summary: Transfer patient to different bed/ward
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_bed_id]
+              properties:
+                new_bed_id: { type: string }
+                reason: { type: string }
+      responses:
+        "200": { description: "Transferred" }
+
+  /ipd/admissions/{id}/round-notes:
+    post:
+      tags: [IPD]
+      summary: Add daily round note (DOCTOR)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes: { type: string }
+                vitals: { type: object }
+                orders: { type: array }
+      responses:
+        "200": { description: "Round note added" }
+
+  /ipd/admissions/{id}/vitals:
+    patch:
+      tags: [IPD]
+      summary: Record vitals (NURSE)
+      responses:
+        "200": { description: "Vitals recorded" }
+
+  /ipd/admissions/{id}/medication:
+    patch:
+      tags: [IPD]
+      summary: Record medication administration (NURSE)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [drug_name, administered_at]
+              properties:
+                drug_name: { type: string }
+                dose: { type: string }
+                administered_at: { type: string, format: date-time }
+      responses:
+        "200": { description: "Medication recorded" }
+
+  /ipd/admissions/{id}/discharge:
+    post:
+      tags: [IPD]
+      summary: Discharge patient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [summary, follow_up_instructions]
+              properties:
+                summary: { type: string }
+                follow_up_instructions: { type: string }
+                medications_on_discharge: { type: array }
+                follow_up_date: { type: string, format: date }
+      responses:
+        "200": { description: "Discharged — bed freed — billing finalized" }
+
+  /ipd/nursing-station:
+    get:
+      tags: [IPD]
+      summary: Nursing station tasks (vitals due, meds due)
+      parameters:
+        - name: facility_id
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vitals_due: { type: array }
+                  medications_due: { type: array }
+                  doctor_orders: { type: array }
+
+  # ─── RADIOLOGY ───────────────────────────────────
+  /radiology/catalog:
+    get:
+      tags: [Radiology]
+      summary: Radiology test catalog
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+    post:
+      tags: [Radiology]
+      summary: Add radiology test type
+      responses:
+        "201": { description: "Created" }
+
+  /encounters/{id}/radiology-orders:
+    post:
+      tags: [Radiology]
+      summary: Create radiology order from encounter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [test_type, body_part]
+              properties:
+                test_type: { type: string }
+                body_part: { type: string }
+                clinical_indication: { type: string }
+                urgency: { type: string, enum: [routine, urgent, stat] }
+      responses:
+        "201": { description: "Order created" }
+
+  /radiology/orders:
+    get:
+      tags: [Radiology]
+      summary: Radiology orders queue
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+
+  /radiology/orders/{id}/report:
+    put:
+      tags: [Radiology]
+      summary: Enter radiology report
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [findings, impression]
+              properties:
+                findings: { type: string }
+                impression: { type: string }
+                conclusion: { type: string }
+                attachments: { type: array }
+      responses:
+        "200": { description: "Report entered" }
+
+  /radiology/orders/{id}/authorize:
+    post:
+      tags: [Radiology]
+      summary: Authorize radiology report
+      responses:
+        "200": { description: "Authorized — billing event" }
+
+  # ─── MESSAGING ───────────────────────────────────
+  /messaging/conversations:
+    get:
+      tags: [Messaging]
+      summary: List user's conversations
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+    post:
+      tags: [Messaging]
+      summary: Create conversation (direct or group)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [participants]
+              properties:
+                participants: { type: array, items: { type: string } }
+                name: { type: string }
+                type: { type: string, enum: [direct, group] }
+      responses:
+        "201": { description: "Conversation created" }
+
+  /messaging/conversations/{id}/messages:
+    get:
+      tags: [Messaging]
+      summary: Get messages in conversation (paginated)
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  messages: { type: array }
+                  has_more: { type: boolean }
+    post:
+      tags: [Messaging]
+      summary: Send message
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string }
+                type: { type: string, enum: [text, image, file] }
+                attachment_url: { type: string }
+                patient_id: { type: string }
+      responses:
+        "201": { description: "Message sent — WebSocket push to recipients" }
+
+  # ─── INVENTORY ───────────────────────────────────
+  /inventory/items:
+    get:
+      tags: [Inventory]
+      summary: Item catalog
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+    post:
+      tags: [Inventory]
+      summary: Add item
+      responses:
+        "201": { description: "Item added" }
+
+  /inventory/transactions:
+    get:
+      tags: [Inventory]
+      summary: Stock transaction history
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+    post:
+      tags: [Inventory]
+      summary: Record stock transaction
+      responses:
+        "201": { description: "Transaction recorded" }
+
+  # ─── TRIAGE ──────────────────────────────────────
+  /triage/session:
+    post:
+      tags: [Triage]
+      summary: "[PUBLIC] Start triage session"
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [org_id, symptoms]
+              properties:
+                org_id: { type: string }
+                symptoms: { type: array, items: { type: string } }
+                patient_phone: { type: string }
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_id: { type: string }
+                  follow_up_questions: { type: array }
+
+  /triage/session/{id}/respond:
+    post:
+      tags: [Triage]
+      summary: "[PUBLIC] Answer follow-up questions"
+      security: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  urgency: { type: string, enum: [red, amber, green] }
+                  assessment: { type: string }
+                  recommendation: { type: string }
+                  book_appointment_link: { type: string }
+
+  # ─── AMBIENT AUDIO AI ───────────────────────────
+  /ai/ambient/start:
+    post:
+      tags: [AI Ambient]
+      summary: Start audio transcription session
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [encounter_id]
+              properties:
+                encounter_id: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_id: { type: string }
+                  websocket_url: { type: string }
+
+  /ai/ambient/{sessionId}/stop:
+    post:
+      tags: [AI Ambient]
+      summary: Stop recording and get final SOAP
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transcription: { type: string }
+                  soap: { type: object }
+                  audio_url: { type: string }
+
+  # ─── CAMPAIGNS ───────────────────────────────────
+  /campaigns:
+    get:
+      tags: [Campaigns]
+      summary: List campaigns
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+    post:
+      tags: [Campaigns]
+      summary: Create campaign
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, channel, audience_filter, message_template]
+              properties:
+                name: { type: string }
+                channel: { type: string, enum: [sms, email] }
+                audience_filter: { type: object }
+                message_template: { type: string }
+                scheduled_at: { type: string, format: date-time }
+      responses:
+        "201": { description: "Campaign created" }
+
+  /campaigns/{id}/send:
+    post:
+      tags: [Campaigns]
+      summary: Start sending campaign
+      responses:
+        "200": { description: "Broadcast started" }
+
+  /campaigns/{id}/analytics:
+    get:
+      tags: [Campaigns]
+      summary: Campaign delivery analytics
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  delivered: { type: integer }
+                  failed: { type: integer }
+                  opt_out: { type: integer }
+
+  # ─── CMS ─────────────────────────────────────────
+  /cms/pages:
+    get:
+      tags: [CMS]
+      summary: List org CMS pages
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+    post:
+      tags: [CMS]
+      summary: Create CMS page
+      responses:
+        "201": { description: "Page created" }
+
+  /cms/pages/{id}:
+    put:
+      tags: [CMS]
+      summary: Update CMS page (sections, SEO, publish status)
+      responses:
+        "200": { description: "Page updated" }
+
+  /cms/pages/{id}/publish:
+    post:
+      tags: [CMS]
+      summary: Publish CMS page
+      responses:
+        "200": { description: "Published" }
+
+  /public/clinic/{orgSlug}:
+    get:
+      tags: [CMS]
+      summary: "[PUBLIC] Get published clinic page data"
+      security: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ─── ANALYTICS ENHANCED ──────────────────────────
+  /analytics/clinical:
+    get:
+      tags: [Analytics]
+      summary: Clinical quality KPIs
+      parameters:
+        - name: period
+          in: query
+          schema: { type: string, enum: [weekly, monthly, quarterly] }
+        - name: facility_id
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  avg_encounter_duration: { type: number }
+                  follow_up_rate: { type: number }
+                  no_show_rate: { type: number }
+                  ai_acceptance_rate: { type: number }
+
+  /analytics/demographics:
+    get:
+      tags: [Analytics]
+      summary: Patient demographics dashboard
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  age_distribution: { type: array }
+                  gender_distribution: { type: object }
+                  top_diagnoses: { type: array }
+
+  /analytics/ai-usage:
+    get:
+      tags: [Analytics]
+      summary: AI copilot usage analytics
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_requests: { type: integer }
+                  acceptance_rate: { type: number }
+                  avg_time_saved_minutes: { type: number }
+                  most_used_feature: { type: string }
+
+  /analytics/export:
+    post:
+      tags: [Analytics]
+      summary: Export report as PDF or CSV
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [report_type, format]
+              properties:
+                report_type: { type: string, enum: [revenue, clinical, demographics, ai_usage] }
+                format: { type: string, enum: [pdf, csv] }
+                period: { type: string }
+      responses:
+        "200":
+          description: File download
+
+  # ─── CONFIG ──────────────────────────────────────
+  /config/modules:
+    get:
+      tags: [Config]
+      summary: Get org module configuration
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    module_name: { type: string }
+                    is_enabled: { type: boolean }
+    put:
+      tags: [Config]
+      summary: Toggle module (ORG_ADMIN)
+      responses:
+        "200": { description: "Module toggled" }
+
+  /config/custom-fields:
+    get:
+      tags: [Config]
+      summary: Get custom field definitions for entity type
+      parameters:
+        - name: entity_type
+          in: query
+          required: true
+          schema: { type: string, enum: [patient, encounter] }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+    post:
+      tags: [Config]
+      summary: Create custom field definition
+      responses:
+        "201": { description: "Custom field created" }
+
+  # ─── BACKUP ──────────────────────────────────────
+  /admin/backup:
+    post:
+      tags: [Backup]
+      summary: Trigger manual backup
+      responses:
+        "202": { description: "Backup started" }
+    get:
+      tags: [Backup]
+      summary: Backup history
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+
+  /admin/backup/{id}/restore:
+    post:
+      tags: [Backup]
+      summary: Request point-in-time restore (requires confirmation)
+      responses:
+        "202": { description: "Restore request queued" }
+
+  # ─── BOOKING WIDGET ──────────────────────────────
+  /widget/{orgSlug}/doctors:
+    get:
+      tags: [Widget]
+      summary: "[PUBLIC] List doctors for booking widget"
+      security: []
+      parameters:
+        - name: specialty
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+
+  /widget/{orgSlug}/book:
+    post:
+      tags: [Widget]
+      summary: "[PUBLIC] Guest booking (no portal account needed)"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [patient_name, patient_phone, doctor_id, facility_id, start_time]
+              properties:
+                patient_name: { type: string }
+                patient_phone: { type: string }
+                doctor_id: { type: string }
+                facility_id: { type: string }
+                start_time: { type: string, format: date-time }
+      responses:
+        "201": { description: "Appointment booked — SMS confirmation sent" }

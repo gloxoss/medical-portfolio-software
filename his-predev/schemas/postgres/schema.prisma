@@ -1,0 +1,375 @@
+// ============================================================
+// MediCore HIS — Prisma Schema (PostgreSQL)
+// All tables with financial, auth, or relational data
+// Clinical documents live in MongoDB (see schemas/mongo/)
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── TENANCY ─────────────────────────────────────────────────
+
+model Organization {
+  id           String    @id @default(cuid())
+  name         String
+  slug         String    @unique
+  logo_url     String?
+  mrn_prefix   String    @db.VarChar(10)
+  mrn_counter  Int       @default(0)
+  plan         Plan      @default(SOLO)
+  status       OrgStatus @default(TRIAL)
+  trial_ends_at DateTime?
+
+  // Stripe SaaS billing
+  stripe_customer_id     String? @unique
+  stripe_subscription_id String? @unique
+
+  settings Json? // { default_currency, default_language, timezone, date_format }
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  facilities Facility[]
+  users      User[]
+  invoices   Invoice[]
+  services   Service[]
+  tax_configs TaxConfig[]
+  notification_templates NotificationTemplate[]
+
+  @@map("organizations")
+}
+
+model Facility {
+  id      String         @id @default(cuid())
+  org_id  String
+  name    String
+  address Json?          // { line1, city, region, country }
+  phone   String?
+  email   String?
+  settings Json?         // { consultation_fee, currency override, queue_prefix }
+  status  FacilityStatus @default(ACTIVE)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  org         Organization      @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  user_roles  UserFacilityRole[]
+  schedules   DoctorSchedule[]
+  invoices    Invoice[]
+
+  @@index([org_id])
+  @@map("facilities")
+}
+
+model Department {
+  id          String   @id @default(cuid())
+  org_id      String
+  facility_id String
+  name        String
+  specialty   String?
+  created_at  DateTime @default(now())
+
+  @@index([org_id, facility_id])
+  @@map("departments")
+}
+
+// ─── USERS & AUTH ────────────────────────────────────────────
+
+model User {
+  id             String     @id @default(cuid())
+  email          String     @unique
+  password_hash  String
+  org_id         String
+  name_first     String
+  name_last      String
+  phone          String?
+  photo_url      String?
+  is_super_admin Boolean    @default(false)
+  status         UserStatus @default(ACTIVE)
+
+  // Doctor-specific (null for non-doctors)
+  doctor_specialties  String[]  // e.g. ["Cardiology", "Internal Medicine"]
+  doctor_license_no   String?
+  doctor_bio          String?
+  doctor_consult_fee  Decimal?  @db.Decimal(10, 2)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  last_login DateTime?
+
+  org            Organization       @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  facility_roles UserFacilityRole[]
+  refresh_tokens RefreshToken[]
+  schedules      DoctorSchedule[]
+
+  @@index([org_id, status])
+  @@map("users")
+}
+
+model UserFacilityRole {
+  id          String  @id @default(cuid())
+  user_id     String
+  facility_id String
+  role        Role
+  is_active   Boolean @default(true)
+
+  user     User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  facility Facility @relation(fields: [facility_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, facility_id])
+  @@index([facility_id, role])
+  @@map("user_facility_roles")
+}
+
+model RefreshToken {
+  id         String   @id @default(cuid())
+  user_id    String
+  token_hash String   @unique
+  expires_at DateTime
+  revoked    Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("refresh_tokens")
+}
+
+// ─── SCHEDULING ──────────────────────────────────────────────
+
+model DoctorSchedule {
+  id           String   @id @default(cuid())
+  doctor_id    String
+  facility_id  String
+  day_of_week  Int      // 0=Sun, 1=Mon, ..., 6=Sat
+  start_time   String   // "09:00"
+  end_time     String   // "13:00"
+  slot_minutes Int      @default(15)
+  is_active    Boolean  @default(true)
+
+  // Break times stored as JSON array: [{ start: "11:00", end: "11:15" }]
+  breaks Json?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  doctor   User     @relation(fields: [doctor_id], references: [id])
+  facility Facility @relation(fields: [facility_id], references: [id])
+
+  @@unique([doctor_id, facility_id, day_of_week])
+  @@index([facility_id, doctor_id])
+  @@map("doctor_schedules")
+}
+
+// ─── BILLING ─────────────────────────────────────────────────
+
+model Service {
+  id          String   @id @default(cuid())
+  org_id      String
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  currency    String   @default("MAD")
+  category    String?  // "consultation", "procedure", "lab", "radiology"
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  org   Organization  @relation(fields: [org_id], references: [id])
+  items InvoiceItem[]
+
+  @@index([org_id, is_active])
+  @@map("services")
+}
+
+model TaxConfig {
+  id         String  @id @default(cuid())
+  org_id     String
+  name       String  // "TVA 20%"
+  rate       Decimal @db.Decimal(5, 2) // 20.00
+  inclusive  Boolean @default(false)   // true = price includes tax
+  is_default Boolean @default(false)
+  is_active  Boolean @default(true)
+
+  org Organization @relation(fields: [org_id], references: [id])
+
+  @@index([org_id])
+  @@map("tax_configs")
+}
+
+model Invoice {
+  id           String        @id @default(cuid())
+  org_id       String
+  facility_id  String
+  patient_id   String        // MongoDB ObjectId as string
+  encounter_id String?       // MongoDB ObjectId as string (null for manual invoices)
+  invoice_no   String        @unique // e.g. "INV-2025-00142"
+  status       InvoiceStatus @default(DRAFT)
+
+  subtotal   Decimal @db.Decimal(10, 2)
+  tax_amount Decimal @db.Decimal(10, 2) @default(0)
+  discount   Decimal @db.Decimal(10, 2) @default(0)
+  total      Decimal @db.Decimal(10, 2)
+  currency   String  @default("MAD")
+
+  notes     String?
+  issued_at DateTime?
+  due_at    DateTime?
+  paid_at   DateTime?
+  void_at   DateTime?
+
+  // Stripe
+  stripe_payment_intent_id String? @unique
+  stripe_payment_url       String?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  created_by String   // user_id
+
+  org      Organization  @relation(fields: [org_id], references: [id])
+  facility Facility      @relation(fields: [facility_id], references: [id])
+  items    InvoiceItem[]
+  payments Payment[]
+
+  @@index([org_id, facility_id, status])
+  @@index([org_id, patient_id])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String  @id @default(cuid())
+  invoice_id  String
+  service_id  String?
+  description String
+  quantity    Int     @default(1)
+  unit_price  Decimal @db.Decimal(10, 2)
+  total       Decimal @db.Decimal(10, 2)
+
+  invoice Invoice  @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+  service Service? @relation(fields: [service_id], references: [id])
+
+  @@map("invoice_items")
+}
+
+model Payment {
+  id         String        @id @default(cuid())
+  invoice_id String
+  amount     Decimal       @db.Decimal(10, 2)
+  currency   String        @default("MAD")
+  method     PaymentMethod
+  status     PaymentStatus @default(PENDING)
+  reference  String?       // Stripe payment intent or cash receipt no.
+  paid_at    DateTime?
+  created_at DateTime      @default(now())
+  created_by String        // user_id
+
+  invoice Invoice @relation(fields: [invoice_id], references: [id])
+
+  @@index([invoice_id])
+  @@map("payments")
+}
+
+// ─── COMMUNICATION ───────────────────────────────────────────
+
+model NotificationTemplate {
+  id       String @id @default(cuid())
+  org_id   String
+  event    String // "appointment.confirmed", "invoice.paid", etc.
+  channel  String // "sms", "email"
+  language String @default("fr")
+  subject  String?
+  body     String // Jinja2 template
+  is_active Boolean @default(true)
+
+  org Organization @relation(fields: [org_id], references: [id])
+
+  @@unique([org_id, event, channel, language])
+  @@map("notification_templates")
+}
+
+// ─── AUDIT LOG ───────────────────────────────────────────────
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  org_id      String
+  facility_id String?
+  user_id     String
+  action      String   // "patient.created", "encounter.signed_off"
+  entity_type String   // "Patient", "Encounter"
+  entity_id   String   // The ID of the affected record
+  changes     Json?    // { before: {}, after: {} }
+  ip_address  String?
+  created_at  DateTime @default(now())
+
+  @@index([org_id, entity_type, entity_id])
+  @@index([org_id, user_id])
+  @@map("audit_logs")
+}
+
+// ─── ENUMS ───────────────────────────────────────────────────
+
+enum Plan {
+  SOLO
+  CLINIC
+  HOSPITAL
+  DIAGNOSTICS
+}
+
+enum OrgStatus {
+  ACTIVE
+  TRIAL
+  SUSPENDED
+  CANCELLED
+}
+
+enum FacilityStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum Role {
+  ORG_ADMIN
+  FACILITY_ADMIN
+  DOCTOR
+  NURSE
+  RECEPTIONIST
+  LAB_TECH
+  RADIOLOGIST
+  PHARMACIST
+  ACCOUNTANT
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  VOID
+}
+
+enum PaymentMethod {
+  CASH
+  STRIPE
+  BANK_TRANSFER
+  INSURANCE
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}

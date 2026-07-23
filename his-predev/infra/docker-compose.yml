@@ -1,0 +1,95 @@
+version: "3.9"
+
+# MediCore HIS — Local development environment
+# Services: PostgreSQL + MongoDB + Redis + (Orthanc for Phase 2)
+# Run: docker-compose up -d
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: his_postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: his_admin
+      POSTGRES_PASSWORD: his_dev_pass
+      POSTGRES_DB: his_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - his_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U his_admin -d his_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongodb:
+    image: mongo:7.0
+    container_name: his_mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: his_admin
+      MONGO_INITDB_ROOT_PASSWORD: his_dev_pass
+      MONGO_INITDB_DATABASE: his_clinical
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - his_network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/his_clinical --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: his_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --save 60 1
+    volumes:
+      - redis_data:/data
+    networks:
+      - his_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Phase 2 services (use: docker-compose --profile phase2 up) ───
+
+  orthanc:
+    image: orthancteam/orthanc:24.1.1
+    container_name: his_orthanc
+    restart: unless-stopped
+    ports:
+      - "8042:8042"  # REST API + web UI
+      - "4242:4242"  # DICOM port
+    environment:
+      ORTHANC__NAME: "MediCore PACS"
+      ORTHANC__AUTHENTICATION_ENABLED: "true"
+      ORTHANC__REGISTERED_USERS: '{"admin": "orthanc_dev_pass"}'
+      ORTHANC__DICOM_AET: "MEDICORE"
+    volumes:
+      - orthanc_data:/var/lib/orthanc/db
+    networks:
+      - his_network
+    profiles:
+      - phase2
+
+volumes:
+  postgres_data:
+  mongo_data:
+  redis_data:
+  orthanc_data:
+
+networks:
+  his_network:
+    driver: bridge

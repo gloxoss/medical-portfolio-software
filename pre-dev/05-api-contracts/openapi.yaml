@@ -1,0 +1,880 @@
+# MediCore HIS — API Contract Summary
+# Full OpenAPI 3.1 spec below. This is the contract between frontend and backend.
+# All endpoints require Bearer JWT unless marked [PUBLIC] or [INTERNAL].
+
+openapi: "3.1.0"
+info:
+  title: MediCore HIS API
+  version: "1.0.0"
+  description: Multi-tenant SaaS Hospital Information System API
+servers:
+  - url: http://localhost:3001/api/v1
+    description: Local development
+  - url: https://api.medicore.app/api/v1
+    description: Production
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  
+  schemas:
+    Error:
+      type: object
+      properties:
+        statusCode: { type: integer }
+        message: { type: string }
+        error: { type: string }
+    
+    Organization:
+      type: object
+      properties:
+        id: { type: string, example: "clx123abc456" }
+        name: { type: string, example: "Cabinet Dr. El Amrani" }
+        slug: { type: string, example: "cabinet-el-amrani" }
+        mrn_prefix: { type: string, example: "CEA" }
+        plan: { type: string, enum: [SOLO, CLINIC, HOSPITAL, DIAGNOSTICS] }
+        status: { type: string, enum: [ACTIVE, TRIAL, SUSPENDED, CANCELLED] }
+        settings: { type: object, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    Facility:
+      type: object
+      properties:
+        id: { type: string }
+        org_id: { type: string }
+        name: { type: string, example: "Ain Diab Clinic" }
+        address: { type: object, nullable: true }
+        phone: { type: string, nullable: true }
+        status: { type: string, enum: [ACTIVE, INACTIVE] }
+
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string, format: email }
+        name_first: { type: string }
+        name_last: { type: string }
+        org_id: { type: string }
+        status: { type: string, enum: [ACTIVE, INACTIVE, SUSPENDED] }
+        doctor_specialties: { type: array, items: { type: string } }
+
+    Patient:
+      type: object
+      properties:
+        _id: { type: string }
+        org_id: { type: string }
+        mrn: { type: string, example: "CEA-2026-00001" }
+        name: { type: object, properties: { first: { type: string }, last: { type: string }, display: { type: string } } }
+        dob: { type: string, format: date }
+        gender: { type: string, enum: [male, female, other, unknown] }
+        phone: { type: string }
+        allergies: { type: array, items: { $ref: "#/components/schemas/Allergy" } }
+        problem_list: { type: array, items: { $ref: "#/components/schemas/Problem" } }
+        status: { type: string, enum: [active, deceased, transferred] }
+
+    Allergy:
+      type: object
+      properties:
+        _id: { type: string }
+        substance: { type: string, example: "Penicillin" }
+        type: { type: string, enum: [drug, food, environmental, other] }
+        reaction: { type: string, example: "Anaphylaxis" }
+        severity: { type: string, enum: [mild, moderate, severe] }
+
+    Problem:
+      type: object
+      properties:
+        _id: { type: string }
+        condition: { type: string }
+        icd_code: { type: string, example: "E11.9" }
+        status: { type: string, enum: [active, resolved, inactive] }
+
+    Encounter:
+      type: object
+      properties:
+        _id: { type: string }
+        org_id: { type: string }
+        facility_id: { type: string }
+        patient_id: { type: string }
+        doctor_id: { type: string }
+        appointment_id: { type: string }
+        status: { type: string, enum: [draft, in_progress, signed_off, archived] }
+        vitals: { type: object }
+        soap: { type: object, properties: { subjective: { type: string }, objective: { type: string }, assessment: { type: string }, plan: { type: string } } }
+        diagnoses: { type: array }
+        prescriptions: { type: array }
+        signed_off_at: { type: string, format: date-time, nullable: true }
+
+    Invoice:
+      type: object
+      properties:
+        id: { type: string }
+        invoice_no: { type: string, example: "INV-2026-00042" }
+        status: { type: string, enum: [DRAFT, SENT, PAID, OVERDUE, VOID] }
+        subtotal: { type: number, example: 300.00 }
+        tax_amount: { type: number }
+        discount: { type: number }
+        total: { type: number, example: 300.00 }
+        currency: { type: string, example: "MAD" }
+        items: { type: array }
+        payments: { type: array }
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ─── AUTH ────────────────────────────────────────
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login with email + password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+                  user: { $ref: "#/components/schemas/User" }
+          headers:
+            Set-Cookie:
+              description: HttpOnly refresh token cookie
+              schema: { type: string }
+        "401": { description: "Invalid credentials" }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token using HttpOnly cookie
+      security: []
+      responses:
+        "200":
+          description: New access token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+        "401": { description: "Invalid or expired refresh token" }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Invalidate refresh token
+      responses:
+        "200": { description: "Logged out" }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user with facility roles
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: "#/components/schemas/User" }
+                  facilities:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        facility_id: { type: string }
+                        facility_name: { type: string }
+                        role: { type: string }
+                        permissions: { type: array, items: { type: string } }
+
+  # ─── TENANCY ─────────────────────────────────────
+  /orgs/onboard:
+    post:
+      tags: [Tenancy]
+      summary: Atomic onboarding — create org + facility + admin user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [org_name, org_slug, mrn_prefix, facility_name, admin_email, admin_password, admin_first_name, admin_last_name]
+              properties:
+                org_name: { type: string }
+                org_slug: { type: string }
+                mrn_prefix: { type: string, maxLength: 10 }
+                facility_name: { type: string }
+                facility_address: { type: object }
+                admin_email: { type: string, format: email }
+                admin_password: { type: string, minLength: 8 }
+                admin_first_name: { type: string }
+                admin_last_name: { type: string }
+      responses:
+        "201":
+          description: Onboarding complete
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  organization: { $ref: "#/components/schemas/Organization" }
+                  facility: { $ref: "#/components/schemas/Facility" }
+                  user: { $ref: "#/components/schemas/User" }
+                  access_token: { type: string }
+        "409": { description: "Slug or email already taken" }
+
+  /orgs/{orgId}/facilities:
+    get:
+      tags: [Tenancy]
+      summary: List facilities for an organization
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Facility" }
+    post:
+      tags: [Tenancy]
+      summary: Create a new facility
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                address: { type: object }
+                phone: { type: string }
+      responses:
+        "201": { description: "Facility created" }
+        "403": { description: "Not ORG_ADMIN" }
+
+  # ─── PATIENTS ────────────────────────────────────
+  /patients:
+    post:
+      tags: [Patients]
+      summary: Register a new patient (auto-generates MRN)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name_first, name_last, phone]
+              properties:
+                name_first: { type: string }
+                name_last: { type: string }
+                phone: { type: string }
+                dob: { type: string, format: date }
+                gender: { type: string, enum: [male, female, other] }
+                national_id: { type: string }
+                email: { type: string }
+                blood_type: { type: string }
+      responses:
+        "201":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Patient" }
+
+  /patients/search:
+    get:
+      tags: [Patients]
+      summary: Search patients by name, phone, MRN, or national ID
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 2 }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Patient" } }
+                  total: { type: integer }
+                  page: { type: integer }
+
+  /patients/{id}:
+    get:
+      tags: [Patients]
+      summary: Get full patient document
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Patient" }
+        "404": { description: "Patient not found (or belongs to different org)" }
+
+  /patients/{id}/allergies:
+    post:
+      tags: [Patients]
+      summary: Add allergy to patient register
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [substance, type, severity]
+              properties:
+                substance: { type: string }
+                type: { type: string, enum: [drug, food, environmental, other] }
+                reaction: { type: string }
+                severity: { type: string, enum: [mild, moderate, severe] }
+      responses:
+        "200": { description: "Allergy added" }
+
+  /patients/{id}/encounters:
+    get:
+      tags: [Patients]
+      summary: Paginated encounter history for a patient
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 10 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Encounter" } }
+                  total: { type: integer }
+
+  # ─── SCHEDULING ──────────────────────────────────
+  /doctors/{id}/schedule:
+    post:
+      tags: [Scheduling]
+      summary: Set doctor working schedule for a facility
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [facility_id, day_of_week, start_time, end_time]
+              properties:
+                facility_id: { type: string }
+                day_of_week: { type: integer, minimum: 0, maximum: 6 }
+                start_time: { type: string, example: "09:00" }
+                end_time: { type: string, example: "13:00" }
+                slot_minutes: { type: integer, default: 15 }
+                breaks: { type: array, items: { type: object, properties: { start: { type: string }, end: { type: string } } } }
+      responses:
+        "201": { description: "Schedule created" }
+        "409": { description: "Schedule already exists for this day" }
+
+  /doctors/{id}/availability:
+    get:
+      tags: [Scheduling]
+      summary: Get available appointment slots for a date
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: facility_id
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    start_time: { type: string, example: "09:00" }
+                    end_time: { type: string, example: "09:15" }
+                    available: { type: boolean }
+
+  /appointments:
+    post:
+      tags: [Scheduling]
+      summary: Book an appointment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [patient_id, doctor_id, facility_id, start_time]
+              properties:
+                patient_id: { type: string }
+                doctor_id: { type: string }
+                facility_id: { type: string }
+                start_time: { type: string, format: date-time }
+                type: { type: string, enum: [consultation, followup, emergency], default: consultation }
+                notes: { type: string }
+      responses:
+        "201": { description: "Appointment booked" }
+        "409": { description: "Slot already taken" }
+
+  /appointments/{id}/checkin:
+    post:
+      tags: [Scheduling]
+      summary: Check in patient and generate queue token
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  queue_token: { type: string, example: "T-042" }
+                  position: { type: integer }
+
+  /facilities/{id}/queue:
+    get:
+      tags: [Scheduling]
+      summary: SSE stream of live queue updates
+      responses:
+        "200":
+          description: Server-Sent Events stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /queue-display/{facilityId}:
+    get:
+      tags: [Scheduling]
+      summary: "[PUBLIC] Queue display data for waiting room TV"
+      security: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  facility_name: { type: string }
+                  current_token: { type: string }
+                  queue: { type: array, items: { type: object, properties: { token: { type: string }, patient_name: { type: string } } } }
+
+  # ─── ENCOUNTERS ──────────────────────────────────
+  /appointments/{id}/encounter:
+    post:
+      tags: [Encounters]
+      summary: Open a new encounter for an appointment (DOCTOR only)
+      responses:
+        "201":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Encounter" }
+        "409": { description: "Encounter already exists for this appointment" }
+        "403": { description: "Not a DOCTOR" }
+
+  /encounters/{id}:
+    get:
+      tags: [Encounters]
+      summary: Get full encounter with all sub-documents
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Encounter" }
+
+  /encounters/{id}/vitals:
+    put:
+      tags: [Encounters]
+      summary: Partial update vitals (autosave)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bp_systolic: { type: number }
+                bp_diastolic: { type: number }
+                heart_rate: { type: number }
+                temperature: { type: number }
+                weight: { type: number }
+                height: { type: number }
+                spo2: { type: number }
+      responses:
+        "200": { description: "Vitals updated" }
+
+  /encounters/{id}/soap:
+    put:
+      tags: [Encounters]
+      summary: Partial update SOAP note (debounced autosave)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                subjective: { type: string }
+                objective: { type: string }
+                assessment: { type: string }
+                plan: { type: string }
+      responses:
+        "200": { description: "SOAP updated" }
+
+  /encounters/{id}/diagnoses:
+    post:
+      tags: [Encounters]
+      summary: Add ICD-10 diagnosis
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [icd_code, description]
+              properties:
+                icd_code: { type: string, example: "J18.9" }
+                description: { type: string, example: "Pneumonia, unspecified organism" }
+                type: { type: string, enum: [primary, secondary, differential], default: primary }
+      responses:
+        "200": { description: "Diagnosis added" }
+
+  /encounters/{id}/prescriptions:
+    post:
+      tags: [Encounters]
+      summary: Add prescription (checks allergy register)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [drug_name, drug_form, dosage_instructions, frequency, duration_days]
+              properties:
+                drug_name: { type: string }
+                drug_form: { type: string, enum: [tablet, capsule, syrup, injection, cream, drops, inhaler, patch, other] }
+                strength: { type: string, example: "500mg" }
+                dosage_instructions: { type: string, example: "1 tablet" }
+                frequency: { type: string, example: "TID" }
+                duration_days: { type: integer }
+                quantity: { type: integer }
+                instructions: { type: string }
+                allergy_override: { type: boolean, default: false }
+      responses:
+        "200": { description: "Prescription added" }
+        "422":
+          description: "Allergy warning (does not block — warns)"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  warning:
+                    type: object
+                    properties:
+                      type: { type: string, example: "allergy_match" }
+                      substance: { type: string }
+                      severity: { type: string }
+                      message: { type: string }
+
+  /encounters/{id}/sign-off:
+    post:
+      tags: [Encounters]
+      summary: Sign off encounter (irreversible) — triggers billing + pharmacy events
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  encounter: { $ref: "#/components/schemas/Encounter" }
+                  invoice_id: { type: string }
+        "422": { description: "Assessment field is empty" }
+
+  # ─── BILLING ─────────────────────────────────────
+  /invoices:
+    get:
+      tags: [Billing]
+      summary: List invoices (filterable)
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [DRAFT, SENT, PAID, OVERDUE, VOID] }
+        - name: facility_id
+          in: query
+          schema: { type: string }
+        - name: from_date
+          in: query
+          schema: { type: string, format: date }
+        - name: to_date
+          in: query
+          schema: { type: string, format: date }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Invoice" } }
+                  total: { type: integer }
+
+  /invoices/{id}:
+    get:
+      tags: [Billing]
+      summary: Get invoice with line items and payments
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Invoice" }
+    put:
+      tags: [Billing]
+      summary: Edit draft invoice (add/remove items, apply discount)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items: { type: array }
+                discount: { type: number }
+                notes: { type: string }
+      responses:
+        "200": { description: "Invoice updated" }
+        "422": { description: "Cannot edit non-DRAFT invoice" }
+
+  /invoices/{id}/send:
+    post:
+      tags: [Billing]
+      summary: Send invoice to patient (email) — status DRAFT → SENT
+      responses:
+        "200": { description: "Invoice sent" }
+
+  /invoices/{id}/payment:
+    post:
+      tags: [Billing]
+      summary: Record a cash or manual payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount, method]
+              properties:
+                amount: { type: number }
+                method: { type: string, enum: [CASH, BANK_TRANSFER, INSURANCE] }
+                reference: { type: string }
+      responses:
+        "200": { description: "Payment recorded" }
+
+  /invoices/{id}/pay/stripe:
+    post:
+      tags: [Billing]
+      summary: Create Stripe payment intent
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  client_secret: { type: string }
+                  payment_intent_id: { type: string }
+
+  /orgs/{id}/revenue:
+    get:
+      tags: [Billing]
+      summary: Revenue aggregates
+      parameters:
+        - name: period
+          in: query
+          schema: { type: string, enum: [daily, weekly, monthly] }
+        - name: facility_id
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: number }
+                  breakdown: { type: array }
+
+  # ─── AI COPILOT (FastAPI) ────────────────────────
+  /ai/copilot/summary:
+    post:
+      tags: [AI Copilot]
+      summary: Generate AI patient summary
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [patient_id, encounter_id]
+              properties:
+                patient_id: { type: string }
+                encounter_id: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary: { type: string }
+                  key_allergies: { type: array, items: { type: string } }
+                  active_problems: { type: array, items: { type: string } }
+                  recent_encounters: { type: array }
+        "429": { description: "Rate limit exceeded" }
+        "503": { description: "AI service unavailable" }
+
+  /ai/copilot/differentials:
+    post:
+      tags: [AI Copilot]
+      summary: Suggest differential diagnoses from SOAP Subjective text
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subjective_text, patient_id]
+              properties:
+                subjective_text: { type: string, minLength: 20 }
+                patient_id: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    condition: { type: string }
+                    icd_code: { type: string }
+                    confidence: { type: string, enum: [high, medium, low] }
+                    rationale: { type: string }
+
+  /ai/copilot/investigations:
+    post:
+      tags: [AI Copilot]
+      summary: Suggest investigations based on differentials
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [differentials]
+              properties:
+                differentials: { type: array, items: { type: string } }
+                patient_id: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    test_name: { type: string }
+                    rationale: { type: string }
+                    urgency: { type: string, enum: [routine, urgent, stat] }
+
+  # ─── INTERNAL (FastAPI → NestJS) ─────────────────
+  /internal/patients/{id}/context:
+    get:
+      tags: [Internal]
+      summary: "[INTERNAL] Patient context for AI service"
+      description: "Requires X-Internal-Service-Key header. Not exposed publicly."
+      parameters:
+        - name: X-Internal-Service-Key
+          in: header
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  patient: { $ref: "#/components/schemas/Patient" }
+                  recent_encounters: { type: array, items: { $ref: "#/components/schemas/Encounter" } }
+                  encounter_count: { type: integer }
+        "401": { description: "Invalid service key" }
+
+  # ─── STRIPE WEBHOOK ──────────────────────────────
+  /stripe/webhook:
+    post:
+      tags: [Billing]
+      summary: Stripe webhook handler
+      security: []
+      description: "Handles payment_intent.succeeded events"
+      responses:
+        "200": { description: "Webhook processed" }
+        "400": { description: "Invalid signature" }

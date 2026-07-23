@@ -1,0 +1,222 @@
+{
+  "main": {
+    "id": "67910c6e3d1aad75",
+    "type": "split",
+    "children": [
+      {
+        "id": "0725a3a4733c3d09",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "541a66b3fb5b4347",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "medicore-his/docs/reports/learning-courses/COMPLETE-EDITABLE-FILES-COURSE.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "COMPLETE-EDITABLE-FILES-COURSE"
+            }
+          },
+          {
+            "id": "f59f5bb0b140a68a",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "ACP & K‑means – Full Course + TD‑Style Examples +.md",
+                "mode": "preview",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "ACP & K‑means – Full Course + TD‑Style Examples +"
+            }
+          }
+        ],
+        "currentTab": 1
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "4316fb8b848b744d",
+    "type": "split",
+    "children": [
+      {
+        "id": "11890256ee443005",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "c9678bda3e871ded",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "3187c62ebc02d114",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "f367c7ce1f5649af",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "d2a977338785b03c",
+    "type": "split",
+    "children": [
+      {
+        "id": "6d44fd9f658e56a9",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "6816559f0e6ac92f",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "Blueprint step 2.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for Blueprint step 2"
+            }
+          },
+          {
+            "id": "71c252991d388467",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "Blueprint step 2.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from Blueprint step 2"
+            }
+          },
+          {
+            "id": "79be29b4bb67ffe5",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "764ddbe377c2ca00",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "263b21b091e6e139",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "Blueprint step 2.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of Blueprint step 2"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "f59f5bb0b140a68a",
+  "lastOpenFiles": [
+    "DESIGN.md",
+    "ACP & K‑means – Full Course + TD‑Style Examples +.md",
+    "medicore-his/docs/reports/learning-courses/COMPLETE-EDITABLE-FILES-COURSE.md",
+    "medicore-his/apps/web/src/app/clinical/telemedicine/[sessionId]/page.tsx",
+    "medicore-his/apps/web/src/app/clinical/telemedicine/[sessionId]",
+    "medicore-his/apps/web/src/app/clinical/telemedicine",
+    "medicore-his/apps/web/src/app/clinical",
+    "medicore-his/apps/web/src/app/portal/telemedicine/[sessionId]/page.tsx",
+    "medicore-his/apps/web/src/app/portal/telemedicine/[sessionId]",
+    "medicore-his/apps/web/src/app/portal/telemedicine",
+    "medicore-his/apps/web/src/app/(clinical)/telemedicine/[sessionId]/page.tsx",
+    "medicore-his/apps/web/src/app/(clinical)/telemedicine/[sessionId]",
+    "medicore-his/apps/web/src/app/(clinical)/telemedicine",
+    "medicore-his/apps/ai/venv/Lib/site-packages/httpx-0.27.2.dist-info/licenses/LICENSE.md",
+    "medicore-his/apps/ai/venv/Lib/site-packages/starlette-0.38.6.dist-info/licenses/LICENSE.md",
+    "medicore-his/apps/ai/venv/Lib/site-packages/uvicorn-0.30.6.dist-info/licenses/LICENSE.md",
+    "medicore-his/apps/ai/venv/Lib/site-packages/httpcore-1.0.9.dist-info/licenses/LICENSE.md",
+    "Blueprint step 2.md"
+  ]
+}

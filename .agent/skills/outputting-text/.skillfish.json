@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "name": "outputting-text",
+  "owner": "warrenzhu050413",
+  "repo": "warren-claude-code-plugin-marketplace",
+  "path": "claude-context-orchestrator/snippets/local/output-formats/outputting-text",
+  "branch": "main",
+  "sha": "4668f06e02e1329ceece939e39aded8e68bfef12",
+  "source": "manual"
+}

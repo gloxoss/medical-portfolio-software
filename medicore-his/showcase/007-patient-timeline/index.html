@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MediCore HIS — Patient Timeline (Showcase)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg-base:#09090b;--bg-card:#18181b;--bg-surface:#0f1117;--border:#27272a;--text-primary:#fafafa;--text-muted:#71717a;--primary:#14b8a6;--radius:10px;--success:#22c55e;--warning:#f59e0b}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg-base);color:var(--text-primary);font-family:'Inter',sans-serif;min-height:100vh;padding-bottom:48px}
+    .showcase-header{background:linear-gradient(135deg,#0f1117,#14b8a620);border-bottom:1px solid var(--border);padding:32px 40px}
+    .badge{display:inline-block;font-size:11px;font-weight:600;color:var(--primary);background:#14b8a615;border:1px solid #14b8a630;border-radius:999px;padding:4px 12px;margin-bottom:12px;letter-spacing:.05em;text-transform:uppercase}
+    h1{font-size:28px;font-weight:700;letter-spacing:-.5px}
+    .subtitle{color:var(--text-muted);font-size:14px;margin-top:6px}
+    main{padding:40px;max-width:900px;margin:0 auto}
+
+    /* Patient header */
+    .patient-header{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px 28px;display:flex;justify-content:space-between;align-items:center;margin-bottom:32px;flex-wrap:wrap;gap:16px}
+    .patient-name{font-size:22px;font-weight:700;letter-spacing:-.3px}
+    .patient-meta{display:flex;gap:20px;margin-top:8px;flex-wrap:wrap}
+    .patient-meta span{font-size:13px;color:var(--text-muted)}
+    .patient-meta strong{color:var(--text-primary)}
+    .patient-meta .mono{font-family:'JetBrains Mono',monospace;font-size:12px}
+    .allergy-badge{display:inline-block;font-size:11px;font-weight:600;background:#ef444420;color:#f87171;border-radius:4px;padding:2px 8px;margin-left:8px}
+    .action-btns{display:flex;gap:10px;flex-wrap:wrap}
+    .btn{padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;border:1px solid;display:inline-flex;align-items:center;gap:6px}
+    .btn-primary{background:var(--primary);color:#000;border-color:var(--primary)}
+    .btn-primary:hover{opacity:.9}
+    .btn-outline{background:transparent;color:var(--text-primary);border-color:var(--border)}
+    .btn-outline:hover{border-color:var(--primary);color:var(--primary)}
+
+    /* Timeline */
+    .timeline-header{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:20px;display:flex;align-items:center;gap:8px}
+    .timeline{position:relative;padding-left:28px;border-left:2px solid var(--border)}
+    .encounter{position:relative;margin-bottom:24px}
+    .encounter-dot{position:absolute;left:-37px;top:6px;width:16px;height:16px;border-radius:50%;border:3px solid var(--bg-base)}
+    .dot-signed{background:var(--primary)}
+    .dot-progress{background:var(--warning)}
+    .encounter-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px 22px;transition:border-color .15s}
+    .encounter-card:hover{border-color:#14b8a640}
+    .enc-top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+    .enc-date{font-weight:600;font-size:14px}
+    .enc-status{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:3px 8px;border-radius:4px}
+    .status-signed{background:#14b8a620;color:var(--primary)}
+    .status-progress{background:#f59e0b20;color:var(--warning)}
+    .enc-dx{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+    .dx-tag{display:inline-flex;align-items:center;gap:6px;background:#27272a;border-radius:6px;padding:4px 10px;font-size:12px}
+    .dx-code{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--primary);opacity:.9}
+    .enc-rx{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--text-muted)}
+    .rx-item::before{content:'💊 '}
+    .enc-link{font-size:12px;font-weight:600;color:var(--primary);text-decoration:none;float:right;margin-top:8px;transition:opacity .15s}
+    .enc-link:hover{opacity:.7}
+
+    .showcase-footer{padding:24px 40px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;margin-top:40px}
+    .showcase-footer p{font-size:13px;color:var(--text-muted)}
+    .showcase-footer strong{color:var(--text-primary)}
+    .tech-pills{display:flex;gap:8px}
+    .pill{font-size:10px;font-weight:600;color:var(--text-muted);background:var(--border);border-radius:999px;padding:3px 10px;text-transform:uppercase;letter-spacing:.06em}
+  </style>
+</head>
+<body>
+  <header class="showcase-header">
+    <span class="badge">🏥 MediCore HIS — Feature Showcase #007</span>
+    <h1>Patient Timeline</h1>
+    <p class="subtitle">Aggregated clinical history — encounters, ICD-10 diagnoses, prescriptions, in chronological order</p>
+  </header>
+
+  <main>
+    <!-- Patient header -->
+    <!-- LEARN: In the real app, this data merges PatientApi.getById() + EncounterApi.getPatientHistory()
+         both called in parallel via two useQuery hooks, keyed by patient ID + facilityId -->
+    <div class="patient-header">
+      <div>
+        <div class="patient-name">
+          Fatima Bennani
+          <span class="allergy-badge">⚠ Penicillin</span>
+        </div>
+        <div class="patient-meta">
+          <span>MRN: <strong class="mono">CMC-2026-0042</strong></span>
+          <span>DOB: <strong>14 Mar 1982</strong></span>
+          <span>Contact: <strong class="mono">+212 661 234 567</strong></span>
+        </div>
+      </div>
+      <div class="action-btns">
+        <button class="btn btn-primary">Schedule Visit</button>
+        <button class="btn btn-outline">Direct Encounter</button>
+      </div>
+    </div>
+
+    <!-- Timeline -->
+    <!-- LEARN: The timeline spine is a CSS border-left on the parent container.
+         Each encounter node has position:absolute to "hang" the dot on the spine.
+         This is pure CSS — no SVG, no canvas, no library. -->
+    <div class="timeline-header">📜 Encounter History</div>
+    <div class="timeline" id="timeline"></div>
+  </main>
+
+  <footer class="showcase-footer">
+    <div>
+      <p>Built by <strong>Oussama Zaki</strong> · MediCore HIS · Session 3</p>
+      <p style="margin-top:4px">MongoDB clinical docs + PostgreSQL billing unified in one view</p>
+    </div>
+    <div class="tech-pills">
+      <span class="pill">MongoDB</span>
+      <span class="pill">PostgreSQL</span>
+      <span class="pill">NestJS</span>
+      <span class="pill">React Query</span>
+    </div>
+  </footer>
+
+  <script>
+    // LEARN: Realistic Moroccan patient data. ICD-10 codes are real — J06.9 is acute URI,
+    // I10 is essential hypertension. In the real app these come from Encounter.diagnoses[].
+    const encounters = [
+      {
+        date: '2026-04-07', status: 'signed_off',
+        diagnoses: [{ code:'J06.9', desc:'Acute upper respiratory infection' }],
+        prescriptions: ['Amoxicillin 500mg 3x/day 7d', 'Paracetamol 1g PRN'],
+      },
+      {
+        date: '2026-03-22', status: 'signed_off',
+        diagnoses: [{ code:'I10', desc:'Essential hypertension' }, { code:'E11.9', desc:'Type 2 diabetes' }],
+        prescriptions: ['Amlodipine 5mg 1x/day', 'Metformin 850mg 2x/day'],
+      },
+      {
+        date: '2026-02-14', status: 'signed_off',
+        diagnoses: [{ code:'M54.5', desc:'Low back pain' }],
+        prescriptions: ['Ibuprofen 400mg 3x/day 5d', 'Muscle relaxant PRN'],
+      },
+      {
+        date: '2026-04-08', status: 'in_progress',
+        diagnoses: [],
+        prescriptions: [],
+      },
+    ];
+
+    // Sort newest first
+    encounters.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    const container = document.getElementById('timeline');
+    encounters.forEach(enc => {
+      const isSigned = enc.status === 'signed_off';
+      const div = document.createElement('div');
+      div.className = 'encounter';
+      div.innerHTML = `
+        <div class="encounter-dot ${isSigned ? 'dot-signed' : 'dot-progress'}"></div>
+        <div class="encounter-card">
+          <div class="enc-top">
+            <span class="enc-date">${new Date(enc.date).toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric',year:'numeric'})}</span>
+            <span class="enc-status ${isSigned ? 'status-signed' : 'status-progress'}">${isSigned ? 'Signed Off' : 'In Progress'}</span>
+          </div>
+          ${enc.diagnoses.length > 0 ? `
+            <div class="enc-dx">
+              ${enc.diagnoses.map(d => `<span class="dx-tag"><span class="dx-code">${d.code}</span> ${d.desc}</span>`).join('')}
+            </div>
+          ` : '<p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;font-style:italic">Encounter in progress — no diagnoses yet</p>'}
+          ${enc.prescriptions.length > 0 ? `
+            <div class="enc-rx">
+              ${enc.prescriptions.map(rx => `<span class="rx-item">${rx}</span>`).join('')}
+            </div>
+          ` : ''}
+          <a href="#" class="enc-link" onclick="return false">${isSigned ? 'View Record →' : 'Resume Encounter →'}</a>
+        </div>
+      `;
+      container.appendChild(div);
+    });
+  </script>
+</body>
+</html>

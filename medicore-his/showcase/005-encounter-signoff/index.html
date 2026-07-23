@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MediCore — Redis PubSub & Encounter Sign-Off (Showcase)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    
+    .loading-bar {
+      width: 100%;
+      height: 4px;
+      background-color: #f3f4f6;
+      overflow: hidden;
+      position: relative;
+    }
+    
+    .loading-bar::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 50%;
+      background-color: #3b82f6;
+      animation: sweep 1s infinite ease-in-out;
+    }
+
+    @keyframes sweep {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(200%); }
+    }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900 h-screen flex flex-col items-center py-12">
+  
+  <header class="text-center mb-10 space-y-2">
+    <span class="inline-block bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">🏥 MediCore HIS — Core Architecture</span>
+    <h1 class="text-3xl font-bold tracking-tight">Redis PubSub & Encounter Sign-Off</h1>
+    <p class="text-gray-500 max-w-lg mx-auto">Demonstrating lock enforcement and asynchronous Redis queue billing invoice evaluation.</p>
+  </header>
+
+  <div class="flex flex-col gap-6 w-full max-w-2xl bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+    
+    <!-- Encounter Details -->
+    <div class="flex justify-between items-center border-b pb-4">
+      <div>
+        <h2 class="text-lg font-bold text-gray-800">Encounter E-992K</h2>
+        <p class="text-sm text-gray-500">Patient: John Doe (MRN: 8812A) • Dr. Smith</p>
+      </div>
+      <span id="badge-status" class="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-0.5 rounded border border-yellow-200">IN PROGRESS</span>
+    </div>
+
+    <!-- Interactive Clinical Panel -->
+    <div class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Assessment Draft (SOAP)</label>
+        <textarea id="soap-textarea" class="w-full border border-gray-300 rounded p-3 text-sm focus:ring-2 focus:ring-blue-500 transition-all font-mono" rows="3" placeholder="Physician's notes...">Patient presents with mild respiratory distress. Prescribed Albuterol.</textarea>
+      </div>
+    </div>
+
+    <!-- Polling / Output State -->
+    <div id="polling-container" class="hidden flex flex-col items-center justify-center p-4 bg-gray-50 border border-gray-200 rounded">
+      <div class="loading-bar mb-3 rounded overflow-hidden"></div>
+      <p id="polling-text" class="text-sm font-medium text-gray-600 animate-pulse">POST /api/v1/encounters/E-992K/sign-off...</p>
+    </div>
+
+    <!-- Actions -->
+    <div class="pt-4 flex items-center justify-between">
+      <div id="invoice-link" class="hidden">
+        <a href="#" class="text-sm font-medium text-blue-600 hover:text-blue-800 transition">View Draft Invoice 🧾 &rarr;</a>
+      </div>
+      <button id="sign-off-btn" onclick="triggerSignOff()" class="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 transition font-medium ml-auto">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Sign Off Encounter
+      </button>
+    </div>
+
+  </div>
+
+  <footer class="mt-12 text-center text-sm text-gray-400 space-y-1">
+    <p>Simulating strict microservice decoupling. Built by <strong>Oussama Zaki</strong> · MediCore HIS</p>
+  </footer>
+
+  <script>
+    function triggerSignOff() {
+      // 1. Lock the UI instantly
+      document.getElementById('sign-off-btn').disabled = true;
+      document.getElementById('sign-off-btn').classList.add('opacity-50', 'cursor-not-allowed');
+      document.getElementById('soap-textarea').disabled = true;
+      document.getElementById('soap-textarea').classList.add('bg-gray-100', 'cursor-not-allowed', 'opacity-70');
+      
+      const badge = document.getElementById('badge-status');
+      badge.textContent = "SIGNED OFF";
+      badge.className = "bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5 rounded border border-green-200";
+
+      // 2. Simulate API Call & Redis Polling
+      const pollingContainer = document.getElementById('polling-container');
+      const pollingText = document.getElementById('polling-text');
+      pollingContainer.classList.remove('hidden');
+
+      let attempt = 1;
+      
+      const pollInterval = setInterval(() => {
+        if (attempt === 1) {
+          pollingText.textContent = `Redis Queue: Emitted 'encounter.signed_off' event...`;
+        } else if (attempt === 2) {
+          pollingText.textContent = `GET /encounters/E-992K (Attempt ${attempt}): invoice_id = null`;
+        } else if (attempt === 3) {
+          pollingText.textContent = `Billing Service: Evaluating Pricing Rules...`;
+        } else if (attempt === 5) {
+          pollingText.textContent = `GET /encounters/E-992K (Attempt 3): invoice_id = "INV_00998X" ✅`;
+          clearInterval(pollInterval);
+          
+          setTimeout(() => {
+            pollingContainer.classList.add('hidden');
+            document.getElementById('invoice-link').classList.remove('hidden');
+          }, 1000);
+        }
+        attempt++;
+      }, 900);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MediCore HIS — Billing Ledger (Showcase)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base:#09090b;--bg-card:#18181b;--border:#27272a;
+      --text-primary:#fafafa;--text-muted:#71717a;
+      --primary:#14b8a6;--radius:10px;
+      --success:#22c55e;--warning:#f59e0b;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg-base);color:var(--text-primary);font-family:'Inter',sans-serif;min-height:100vh;padding-bottom:48px}
+    .showcase-header{background:linear-gradient(135deg,#0f1117,#14b8a620);border-bottom:1px solid var(--border);padding:32px 40px}
+    .badge{display:inline-block;font-size:11px;font-weight:600;color:var(--primary);background:#14b8a615;border:1px solid #14b8a630;border-radius:999px;padding:4px 12px;margin-bottom:12px;letter-spacing:.05em;text-transform:uppercase}
+    h1{font-size:28px;font-weight:700;letter-spacing:-.5px}
+    .subtitle{color:var(--text-muted);font-size:14px;margin-top:6px}
+    main{padding:40px;max-width:1000px;margin:0 auto}
+    .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+    .toolbar h2{font-size:18px;font-weight:600}
+    .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary)}
+    .btn:hover{border-color:var(--primary);color:var(--primary)}
+    .table-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+    table{width:100%;border-collapse:collapse}
+    th{padding:12px 16px;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;text-align:left;background:#0f1117;border-bottom:1px solid var(--border)}
+    td{padding:14px 16px;font-size:13px;border-bottom:1px solid #27272a;vertical-align:middle}
+    tr:last-child td{border-bottom:none}
+    .row-actions{display:flex;gap:8px;justify-content:flex-end;opacity:0;transition:opacity .15s}
+    tr:hover .row-actions{opacity:1}
+    tr:hover td{background:#1f1f23}
+    .mono{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600}
+    .badge-status{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:3px 8px;border-radius:4px}
+    .paid{background:#22c55e18;color:#22c55e}
+    .pending{background:#f59e0b18;color:#f59e0b}
+    .draft{background:#3f3f46;color:#a1a1aa}
+    .action-btn{padding:5px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid;transition:all .15s}
+    .pay-btn{background:#14b8a610;color:var(--primary);border-color:#14b8a630}
+    .pay-btn:hover{background:var(--primary);color:#000}
+    .dl-btn{background:transparent;color:var(--text-muted);border-color:var(--border)}
+    .dl-btn:hover{color:var(--text-primary);border-color:#71717a}
+    /* LEARN: Toast notification — pure CSS + JS, no library.
+       In the real app this is handled by the `sonner` package via useMutation callbacks. */
+    .toast{position:fixed;bottom:24px;right:24px;background:#18181b;border:1px solid var(--border);border-radius:10px;padding:14px 20px;font-size:13px;font-weight:500;box-shadow:0 8px 32px #00000060;transform:translateX(120%);transition:transform .3s ease;z-index:999}
+    .toast.show{transform:none}
+    .toast-title{font-weight:700;color:var(--primary);margin-bottom:3px}
+    .showcase-footer{padding:24px 40px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;margin-top:40px}
+    .showcase-footer p{font-size:13px;color:var(--text-muted)}
+    .showcase-footer strong{color:var(--text-primary)}
+    .tech-pills{display:flex;gap:8px}
+    .pill{font-size:10px;font-weight:600;color:var(--text-muted);background:var(--border);border-radius:999px;padding:3px 10px;text-transform:uppercase;letter-spacing:.06em}
+  </style>
+</head>
+<body>
+  <header class="showcase-header">
+    <span class="badge">🏥 MediCore HIS — Feature Showcase #006</span>
+    <h1>Billing Ledger</h1>
+    <p class="subtitle">Financial reconciliation with Stripe payment triggering and Twilio PDF generation</p>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <h2>Invoice Records</h2>
+      <button class="btn" onclick="refresh()">↻ Refresh</button>
+    </div>
+
+    <div class="table-card">
+      <table>
+        <thead>
+          <tr>
+            <th>Invoice No.</th>
+            <th>Date</th>
+            <th>Status</th>
+            <th style="text-align:right">Total (MAD)</th>
+            <th style="text-align:right">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="invoiceBody"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <footer class="showcase-footer">
+    <div>
+      <p>Built by <strong>Oussama Zaki</strong> · MediCore HIS · Session 3</p>
+      <p style="margin-top:4px">Stripe SDK + Twilio PDF fully integrated on backend</p>
+    </div>
+    <div class="tech-pills">
+      <span class="pill">Stripe</span>
+      <span class="pill">Twilio</span>
+      <span class="pill">NestJS</span>
+      <span class="pill">PostgreSQL</span>
+    </div>
+  </footer>
+
+  <!-- LEARN: Toast mimics sonner library used in the real app. Same API (title + description) -->
+  <div class="toast" id="toast">
+    <div class="toast-title" id="toastTitle"></div>
+    <div id="toastMsg"></div>
+  </div>
+
+  <script>
+    // LEARN: In the real app this data comes from BillingApi.getInvoices(facilityId).
+    // The facilityId is pulled from useAuth().activeFacility — NEVER hardcoded.
+    const invoices = [
+      { no:'INV-2026-0067', date:'2026-04-07', status:'PAID',    total:24500 },
+      { no:'INV-2026-0066', date:'2026-04-06', status:'PENDING', total:18200 },
+      { no:'INV-2026-0065', date:'2026-04-05', status:'PAID',    total:15800 },
+      { no:'INV-2026-0064', date:'2026-04-04', status:'DRAFT',   total:12400 },
+      { no:'INV-2026-0063', date:'2026-04-03', status:'PENDING', total:9750  },
+      { no:'INV-2026-0062', date:'2026-04-02', status:'PAID',    total:7300  },
+    ];
+
+    function statusClass(s){ return {PAID:'paid',PENDING:'pending',DRAFT:'draft'}[s]||'draft'; }
+
+    function renderTable() {
+      const tbody = document.getElementById('invoiceBody');
+      tbody.innerHTML = invoices.map(inv => `
+        <tr>
+          <td class="mono">${inv.no}</td>
+          <td style="color:var(--text-muted)">${inv.date}</td>
+          <td><span class="badge-status ${statusClass(inv.status)}">${inv.status}</span></td>
+          <td style="text-align:right;font-weight:600">${inv.total.toLocaleString()}</td>
+          <td>
+            <div class="row-actions">
+              <button class="action-btn dl-btn" onclick="download('${inv.no}')">⬇ PDF</button>
+              ${inv.status !== 'PAID' ? `<button class="action-btn pay-btn" onclick="pay('${inv.no}')">Pay →</button>` : ''}
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function showToast(title, msg) {
+      const t = document.getElementById('toast');
+      document.getElementById('toastTitle').textContent = title;
+      document.getElementById('toastMsg').textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    // LEARN: In the real app this calls BillingApi.initiateStripe(id) → POST /billing/invoices/:id/pay/stripe
+    // The backend creates a real Stripe PaymentIntent and returns client_secret.
+    function pay(no) { showToast('Payment Intent Created', `Stripe session opened for ${no}`); }
+
+    // LEARN: Calls BillingApi.generatePdf(id) → POST /billing/invoices/:id/pdf
+    // This triggers the pdfkit pipeline on the NestJS backend → returns Buffer → email via SendGrid
+    function download(no) { showToast('PDF Generated', `Invoice ${no} generated and dispatched`); }
+
+    function refresh() { showToast('Ledger Synced', 'All invoice records are up to date'); }
+
+    renderTable();
+  </script>
+</body>
+</html>

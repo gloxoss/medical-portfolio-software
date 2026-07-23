@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MediCore Ops Dashboard Showcase</title>
+    <style>
+      :root {
+        --bg-base: #09090b;
+        --bg-sidebar: #0f1117;
+        --bg-card: rgba(255, 255, 255, 0.04);
+        --bg-elevated: #27272a;
+        --text-primary: #f4f4f5;
+        --text-secondary: #d4d4d8;
+        --text-tertiary: #a1a1aa;
+        --text-muted: #71717a;
+        --border-default: rgba(255, 255, 255, 0.1);
+        --accent-bright: #38bdf8;
+        --accent-muted: rgba(14, 165, 233, 0.15);
+        --status-success: #22c55e;
+        --status-success-bg: rgba(34, 197, 94, 0.12);
+        --status-warning: #f59e0b;
+        --status-warning-bg: rgba(245, 158, 11, 0.12);
+        --status-danger: #ef4444;
+        --status-danger-bg: rgba(239, 68, 68, 0.12);
+        --status-info: #6366f1;
+        --status-info-bg: rgba(99, 102, 241, 0.12);
+        --chart-1: #0ea5e9;
+        --chart-2: #22c55e;
+        --chart-3: #6366f1;
+        --chart-4: #f59e0b;
+        --chart-5: #a855f7;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(circle at 20% 0%, #151821 0%, var(--bg-base) 40%);
+        color: var(--text-primary);
+        font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif;
+      }
+
+      .page {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+        letter-spacing: -0.03em;
+      }
+
+      .subtitle {
+        margin: 0;
+        color: var(--text-tertiary);
+        font-size: 14px;
+      }
+
+      .kpi-grid {
+        margin-top: 20px;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .card {
+        border: 1px solid var(--border-default);
+        background: var(--bg-card);
+        border-radius: 10px;
+        padding: 14px;
+      }
+
+      .kpi-label {
+        color: var(--text-muted);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .kpi-value {
+        margin-top: 8px;
+        font-size: 24px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .kpi-trend {
+        margin-top: 6px;
+        font-size: 12px;
+      }
+
+      .trend-positive {
+        color: var(--status-success);
+      }
+
+      .trend-warning {
+        color: var(--status-warning);
+      }
+
+      .trend-danger {
+        color: var(--status-danger);
+      }
+
+      .row {
+        margin-top: 14px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: 12px;
+      }
+
+      .chart {
+        position: relative;
+        height: 220px;
+        border-radius: 10px;
+        border: 1px solid var(--border-default);
+        background:
+          linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px) 0 0 / 45px 100%,
+          linear-gradient(to top, rgba(255, 255, 255, 0.03) 1px, transparent 1px) 0 0 / 100% 36px,
+          var(--bg-card);
+        padding: 14px;
+      }
+
+      .line {
+        position: absolute;
+        left: 14px;
+        right: 14px;
+        bottom: 28px;
+        height: 120px;
+      }
+
+      .line svg {
+        width: 100%;
+        height: 100%;
+      }
+
+      .legend {
+        position: absolute;
+        left: 14px;
+        bottom: 8px;
+        display: flex;
+        gap: 14px;
+        color: var(--text-tertiary);
+        font-size: 12px;
+      }
+
+      .dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        margin-right: 6px;
+      }
+
+      .alerts ul {
+        margin: 10px 0 0;
+        padding: 0;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .alerts li {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+        padding: 8px;
+      }
+
+      .badge {
+        font-size: 11px;
+        font-weight: 600;
+        border-radius: 999px;
+        padding: 2px 8px;
+      }
+
+      .routine {
+        background: var(--status-info-bg);
+        color: var(--status-info);
+      }
+
+      .watch {
+        background: var(--status-warning-bg);
+        color: var(--status-warning);
+      }
+
+      .alert {
+        background: var(--status-danger-bg);
+        color: var(--status-danger);
+      }
+
+      .outbreak {
+        background: rgba(239, 68, 68, 0.22);
+        color: var(--status-danger);
+      }
+
+      .alert-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .muted {
+        color: var(--text-tertiary);
+        font-size: 12px;
+      }
+
+      @media (max-width: 980px) {
+        .kpi-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .row {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 600px) {
+        .kpi-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <h1>Hospital Operations Dashboard</h1>
+      <p class="subtitle">Static showcase artifact for Session 3 release review</p>
+
+      <section class="kpi-grid">
+        <article class="card">
+          <div class="kpi-label">Total Billed</div>
+          <div class="kpi-value">MAD 128,450.00</div>
+          <div class="kpi-trend trend-positive">▲ 6.4%</div>
+        </article>
+        <article class="card">
+          <div class="kpi-label">Total Deposits</div>
+          <div class="kpi-value">MAD 84,320.00</div>
+          <div class="kpi-trend trend-positive">▲ 4.1%</div>
+        </article>
+        <article class="card">
+          <div class="kpi-label">Pending Amount</div>
+          <div class="kpi-value">MAD 31,900.00</div>
+          <div class="kpi-trend trend-warning">▲ 1.7%</div>
+        </article>
+        <article class="card">
+          <div class="kpi-label">Total Expense</div>
+          <div class="kpi-value">MAD 56,200.00</div>
+          <div class="kpi-trend trend-danger">▲ 2.9%</div>
+        </article>
+      </section>
+
+      <section class="row">
+        <article class="chart">
+          <div class="kpi-label">Sales vs Expense</div>
+          <div class="line">
+            <svg viewBox="0 0 100 40" preserveAspectRatio="none" aria-label="Sales and expense trend">
+              <polyline fill="none" stroke="var(--chart-1)" stroke-width="1.4" points="0,31 16,26 32,24 48,20 64,17 80,13 100,10" />
+              <polyline fill="none" stroke="var(--chart-4)" stroke-width="1.4" points="0,34 16,32 32,30 48,28 64,26 80,24 100,22" />
+            </svg>
+          </div>
+          <div class="legend">
+            <span><span class="dot" style="background: var(--chart-1)"></span>Sales</span>
+            <span><span class="dot" style="background: var(--chart-4)"></span>Expense</span>
+          </div>
+        </article>
+
+        <article class="card alerts">
+          <div class="kpi-label">Disease Alerts</div>
+          <ul>
+            <li>
+              <div class="alert-head"><strong>Dengue Fever</strong><span class="badge watch">Watch</span></div>
+              <div class="muted">Affected: 3</div>
+            </li>
+            <li>
+              <div class="alert-head"><strong>Sepsis</strong><span class="badge alert">Alert</span></div>
+              <div class="muted">Affected: 1</div>
+            </li>
+            <li>
+              <div class="alert-head"><strong>Routine Checkup</strong><span class="badge routine">Routine</span></div>
+              <div class="muted">Affected: 0</div>
+            </li>
+            <li>
+              <div class="alert-head"><strong>Influenza Cluster</strong><span class="badge outbreak">Outbreak</span></div>
+              <div class="muted">Affected: 12</div>
+            </li>
+          </ul>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

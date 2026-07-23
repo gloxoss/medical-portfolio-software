@@ -1,0 +1,51 @@
+openapi: 3.0.3
+info:
+  title: MediCore HIS API
+  version: 0.1.0
+paths:
+  /scheduling/appointments/monthly-counts:
+    get:
+      summary: Get monthly appointment counts by day
+      parameters:
+        - in: query
+          name: year
+          required: true
+          schema:
+            type: integer
+            minimum: 2000
+            maximum: 2100
+        - in: query
+          name: month
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+        - in: header
+          name: x-org-id
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: x-facility-id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Daily appointment counts for a given month
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  counts:
+                    type: object
+                    additionalProperties:
+                      type: integer
+                required:
+                  - counts
+        '400':
+          description: Invalid query parameters
+        '401':
+          description: Unauthorized

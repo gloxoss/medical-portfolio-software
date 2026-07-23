@@ -1,0 +1,844 @@
+# MediCore HIS — Phase 3 API Contract
+# HR, Workflow, FHIR, AI Advanced, Ambulance endpoints
+
+openapi: "3.1.0"
+info:
+  title: MediCore HIS API — Phase 3
+  version: "3.0.0"
+servers:
+  - url: http://localhost:3001/api/v1
+
+paths:
+  # ─── HR MODULE ───────────────────────────────────
+  /hr/staff:
+    get:
+      tags: [HR]
+      summary: List staff profiles
+      parameters:
+        - name: department
+          in: query
+          schema: { type: string }
+        - name: facility_id
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string }
+                    user_id: { type: string }
+                    name: { type: string }
+                    department: { type: string }
+                    position: { type: string }
+                    hire_date: { type: string }
+                    contract_type: { type: string }
+    post:
+      tags: [HR]
+      summary: Create staff profile (linked to existing user)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, department, position, hire_date, base_salary]
+              properties:
+                user_id: { type: string }
+                department: { type: string }
+                position: { type: string }
+                hire_date: { type: string, format: date }
+                base_salary: { type: number }
+                salary_currency: { type: string, default: MAD }
+                contract_type: { type: string, enum: [full_time, part_time, contractor] }
+                qualifications: { type: array, items: { type: string } }
+                emergency_contact: { type: object }
+      responses:
+        "201": { description: "Staff profile created" }
+
+  /hr/staff/{id}:
+    get:
+      tags: [HR]
+      summary: Get staff profile detail
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+    put:
+      tags: [HR]
+      summary: Update staff profile
+      responses:
+        "200": { description: "Updated" }
+
+  /hr/attendance:
+    get:
+      tags: [HR]
+      summary: Attendance records (filterable by date, staff, department)
+      parameters:
+        - name: date
+          in: query
+          schema: { type: string, format: date }
+        - name: staff_id
+          in: query
+          schema: { type: string }
+        - name: department
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [PRESENT, LATE, ABSENT, HALF_DAY, ON_LEAVE] }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+
+  /hr/attendance/check-in:
+    post:
+      tags: [HR]
+      summary: Record staff check-in
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                staff_id: { type: string }
+                timestamp: { type: string, format: date-time }
+      responses:
+        "200": { description: "Checked in" }
+
+  /hr/attendance/check-out:
+    post:
+      tags: [HR]
+      summary: Record staff check-out
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                staff_id: { type: string }
+                timestamp: { type: string, format: date-time }
+      responses:
+        "200": { description: "Checked out — hours calculated" }
+
+  /hr/leave:
+    get:
+      tags: [HR]
+      summary: Leave requests list
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [PENDING, APPROVED, REJECTED, CANCELLED] }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+    post:
+      tags: [HR]
+      summary: Submit leave request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [staff_id, type, start_date, end_date]
+              properties:
+                staff_id: { type: string }
+                type: { type: string, enum: [ANNUAL, SICK, PERSONAL, MATERNITY, PATERNITY] }
+                start_date: { type: string, format: date }
+                end_date: { type: string, format: date }
+                reason: { type: string }
+      responses:
+        "201": { description: "Leave request submitted" }
+
+  /hr/leave/{id}/approve:
+    post:
+      tags: [HR]
+      summary: Approve leave request (HR_MANAGER)
+      responses:
+        "200": { description: "Approved" }
+
+  /hr/leave/{id}/reject:
+    post:
+      tags: [HR]
+      summary: Reject leave request
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        "200": { description: "Rejected" }
+
+  /hr/payroll:
+    get:
+      tags: [HR]
+      summary: Payroll records
+      parameters:
+        - name: year
+          in: query
+          required: true
+          schema: { type: integer }
+        - name: month
+          in: query
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+
+  /hr/payroll/generate:
+    post:
+      tags: [HR]
+      summary: Generate monthly payroll for all staff
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [year, month]
+              properties:
+                year: { type: integer }
+                month: { type: integer }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  records_created: { type: integer }
+                  total_net_salary: { type: number }
+
+  /hr/payroll/{id}/approve:
+    post:
+      tags: [HR]
+      summary: Approve individual payroll record
+      responses:
+        "200": { description: "Approved" }
+
+  /hr/payroll/{id}/payslip:
+    get:
+      tags: [HR]
+      summary: Download payslip PDF
+      responses:
+        "200":
+          content:
+            application/pdf: {}
+
+  /hr/reports:
+    get:
+      tags: [HR]
+      summary: HR summary reports (attendance %, leave balance, headcount)
+      parameters:
+        - name: type
+          in: query
+          schema: { type: string, enum: [attendance_summary, leave_balance, headcount, payroll_summary] }
+        - name: period
+          in: query
+          schema: { type: string, enum: [monthly, quarterly, yearly] }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ─── WORKFLOW AUTOMATION ─────────────────────────
+  /workflows:
+    get:
+      tags: [Workflow]
+      summary: List workflow definitions
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string }
+                    name: { type: string }
+                    trigger_event: { type: string }
+                    is_active: { type: boolean }
+                    executions_count: { type: integer }
+    post:
+      tags: [Workflow]
+      summary: Create workflow definition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, trigger_event, conditions, actions]
+              properties:
+                name: { type: string, example: "Diabetes follow-up reminder" }
+                trigger_event:
+                  type: string
+                  enum:
+                    - encounter.signed_off
+                    - appointment.no_show
+                    - patient.registered
+                    - invoice.overdue
+                    - lab.result.authorized
+                    - ipd.patient.discharged
+                    - timer.daily
+                    - timer.weekly
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      field: { type: string, example: "diagnoses[].icd_code" }
+                      operator: { type: string, enum: [equals, contains, matches, gt, lt] }
+                      value: { type: string, example: "E11.*" }
+                actions:
+                  type: array
+                  items:
+                    type: object
+                    required: [type]
+                    properties:
+                      type:
+                        type: string
+                        enum: [send_sms, send_email, create_task, flag_patient, notify_user, webhook]
+                      config: { type: object }
+                      delay_minutes: { type: integer, default: 0 }
+      responses:
+        "201": { description: "Workflow created" }
+
+  /workflows/{id}:
+    get:
+      tags: [Workflow]
+      summary: Get workflow detail
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+    put:
+      tags: [Workflow]
+      summary: Update workflow
+      responses:
+        "200": { description: "Updated" }
+    delete:
+      tags: [Workflow]
+      summary: Delete workflow
+      responses:
+        "204": { description: "Deleted" }
+
+  /workflows/{id}/toggle:
+    patch:
+      tags: [Workflow]
+      summary: Activate or deactivate workflow
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [is_active]
+              properties:
+                is_active: { type: boolean }
+      responses:
+        "200": { description: "Toggled" }
+
+  /workflows/{id}/test:
+    post:
+      tags: [Workflow]
+      summary: Dry-run workflow with sample payload (no side effects)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sample_payload: { type: object }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conditions_met: { type: boolean }
+                  actions_that_would_execute: { type: array }
+
+  /workflows/{id}/visual:
+    get:
+      tags: [Workflow]
+      summary: Get visual workflow definition (React Flow nodes/edges)
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodes: { type: array }
+                  edges: { type: array }
+    put:
+      tags: [Workflow]
+      summary: Save visual workflow definition
+      responses:
+        "200": { description: "Saved" }
+
+  /workflows/executions:
+    get:
+      tags: [Workflow]
+      summary: Workflow execution log
+      parameters:
+        - name: workflow_id
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [SUCCESS, PARTIAL_FAILURE, FAILED] }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string }
+                    workflow_id: { type: string }
+                    trigger_event: { type: string }
+                    status: { type: string }
+                    actions_executed: { type: array }
+                    executed_at: { type: string }
+
+  /workflows/templates:
+    get:
+      tags: [Workflow]
+      summary: Pre-built workflow templates
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string }
+                    name: { type: string }
+                    description: { type: string }
+                    trigger_event: { type: string }
+                    category: { type: string }
+
+  /workflows/templates/{id}/apply:
+    post:
+      tags: [Workflow]
+      summary: Create workflow from template
+      responses:
+        "201": { description: "Workflow created from template" }
+
+  # ─── FHIR R4 ─────────────────────────────────────
+  /fhir/Patient:
+    get:
+      tags: [FHIR]
+      summary: FHIR R4 Patient search
+      parameters:
+        - name: family
+          in: query
+          schema: { type: string }
+        - name: given
+          in: query
+          schema: { type: string }
+        - name: phone
+          in: query
+          schema: { type: string }
+        - name: identifier
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/fhir+json:
+              schema:
+                type: object
+                properties:
+                  resourceType: { type: string, const: Bundle }
+                  type: { type: string, const: searchset }
+                  entry: { type: array }
+
+  /fhir/Patient/{id}:
+    get:
+      tags: [FHIR]
+      summary: FHIR R4 Patient read
+      responses:
+        "200":
+          content:
+            application/fhir+json:
+              schema:
+                type: object
+                properties:
+                  resourceType: { type: string, const: Patient }
+                  id: { type: string }
+                  identifier: { type: array }
+                  name: { type: array }
+                  telecom: { type: array }
+                  gender: { type: string }
+                  birthDate: { type: string }
+
+  /fhir/Encounter:
+    get:
+      tags: [FHIR]
+      summary: FHIR R4 Encounter search
+      parameters:
+        - name: patient
+          in: query
+          schema: { type: string }
+        - name: date
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/fhir+json:
+              schema:
+                type: object
+
+  /fhir/Encounter/{id}:
+    get:
+      tags: [FHIR]
+      summary: FHIR R4 Encounter read
+      responses:
+        "200":
+          content:
+            application/fhir+json:
+              schema:
+                type: object
+
+  /fhir/Observation:
+    get:
+      tags: [FHIR]
+      summary: FHIR R4 Observation search (vitals + lab results)
+      parameters:
+        - name: patient
+          in: query
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { type: string, enum: [vital-signs, laboratory] }
+        - name: code
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/fhir+json:
+              schema:
+                type: object
+
+  /fhir/MedicationRequest:
+    get:
+      tags: [FHIR]
+      summary: FHIR R4 MedicationRequest search (prescriptions)
+      parameters:
+        - name: patient
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/fhir+json:
+              schema:
+                type: object
+
+  /fhir/DiagnosticReport:
+    get:
+      tags: [FHIR]
+      summary: FHIR R4 DiagnosticReport search (lab + radiology)
+      parameters:
+        - name: patient
+          in: query
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { type: string, enum: [LAB, RAD] }
+      responses:
+        "200":
+          content:
+            application/fhir+json:
+              schema:
+                type: object
+
+  /fhir/Organization:
+    get:
+      tags: [FHIR]
+      summary: FHIR R4 Organization read
+      responses:
+        "200":
+          content:
+            application/fhir+json:
+              schema:
+                type: object
+
+  /fhir/Practitioner:
+    get:
+      tags: [FHIR]
+      summary: FHIR R4 Practitioner search (doctors)
+      responses:
+        "200":
+          content:
+            application/fhir+json:
+              schema:
+                type: object
+
+  /fhir/metadata:
+    get:
+      tags: [FHIR]
+      summary: FHIR Capability Statement
+      security: []
+      responses:
+        "200":
+          content:
+            application/fhir+json:
+              schema:
+                type: object
+                properties:
+                  resourceType: { type: string, const: CapabilityStatement }
+
+  # ─── AI ADVANCED ─────────────────────────────────
+  /ai/optimize/schedule:
+    post:
+      tags: [AI Advanced]
+      summary: Suggest schedule optimizations based on demand patterns
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [doctor_id, facility_id, period]
+              properties:
+                doctor_id: { type: string }
+                facility_id: { type: string }
+                period: { type: string, enum: [next_week, next_month] }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suggestions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        day: { type: string }
+                        current_slots: { type: integer }
+                        recommended_slots: { type: integer }
+                        reason: { type: string }
+                  demand_forecast:
+                    type: object
+
+  /ai/population/risk-scores:
+    get:
+      tags: [AI Advanced]
+      summary: Population health risk scoring
+      parameters:
+        - name: facility_id
+          in: query
+          schema: { type: string }
+        - name: risk_level
+          in: query
+          schema: { type: string, enum: [high, medium, low] }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  patients:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        patient_id: { type: string }
+                        patient_name: { type: string }
+                        risk_score: { type: number }
+                        risk_factors: { type: array }
+                        last_visit: { type: string }
+                  distribution:
+                    type: object
+                    properties:
+                      high: { type: integer }
+                      medium: { type: integer }
+                      low: { type: integer }
+
+  /ai/trends/{patientId}:
+    get:
+      tags: [AI Advanced]
+      summary: Longitudinal clinical trends for a patient
+      parameters:
+        - name: metrics
+          in: query
+          schema:
+            type: string
+            example: "weight,systolic_bp,hba1c"
+        - name: period
+          in: query
+          schema: { type: string, enum: [6m, 1y, 2y, all] }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  patient_id: { type: string }
+                  trends:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        metric: { type: string }
+                        data_points:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              date: { type: string }
+                              value: { type: number }
+                        trend_direction: { type: string, enum: [improving, stable, worsening] }
+                        ai_summary: { type: string }
+
+  # ─── AMBULANCE ───────────────────────────────────
+  /ambulance/fleet:
+    get:
+      tags: [Ambulance]
+      summary: List ambulances
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+    post:
+      tags: [Ambulance]
+      summary: Add ambulance to fleet
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vehicle_number, type]
+              properties:
+                vehicle_number: { type: string }
+                type: { type: string, enum: [basic, advanced, neonatal] }
+      responses:
+        "201": { description: "Added" }
+
+  /ambulance/dispatch:
+    post:
+      tags: [Ambulance]
+      summary: Dispatch ambulance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ambulance_id, patient_id, facility_id]
+              properties:
+                ambulance_id: { type: string }
+                patient_id: { type: string }
+                facility_id: { type: string }
+                notes: { type: string }
+      responses:
+        "201": { description: "Dispatched" }
+
+  /ambulance/dispatch/{id}/status:
+    patch:
+      tags: [Ambulance]
+      summary: Update dispatch status
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [EN_ROUTE, ARRIVED, COMPLETED, CANCELLED] }
+      responses:
+        "200": { description: "Status updated" }
+
+  /ambulance/dispatch/{id}/bill:
+    post:
+      tags: [Ambulance]
+      summary: Create billing charge for ambulance service
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount: { type: number }
+                description: { type: string }
+      responses:
+        "200": { description: "Charge added to invoice" }
+
+  # ─── PUSH NOTIFICATIONS (Mobile) ─────────────────
+  /push/register:
+    post:
+      tags: [Push]
+      summary: Register FCM device token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_token, platform]
+              properties:
+                device_token: { type: string }
+                platform: { type: string, enum: [ios, android] }
+      responses:
+        "200": { description: "Token registered" }
+
+  /push/preferences:
+    get:
+      tags: [Push]
+      summary: Get push notification preferences
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  appointment_reminders: { type: boolean }
+                  lab_results: { type: boolean }
+                  messages: { type: boolean }
+                  billing: { type: boolean }
+    put:
+      tags: [Push]
+      summary: Update push notification preferences
+      responses:
+        "200": { description: "Preferences updated" }

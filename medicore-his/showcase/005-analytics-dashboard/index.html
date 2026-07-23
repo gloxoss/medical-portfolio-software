@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MediCore HIS — Analytics Dashboard (Showcase)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    /* LEARN: Design tokens — single source of truth for the entire colour system.
+       In the real app these live in design-tokens.css and are referenced as var(--bg-base) etc.
+       Here we inline them so the showcase is fully self-contained. */
+    :root {
+      --bg-base: #09090b;
+      --bg-surface: #0f1117;
+      --bg-card: #18181b;
+      --bg-card-hover: #1f1f23;
+      --border: #27272a;
+      --text-primary: #fafafa;
+      --text-muted: #71717a;
+      --chart-1: #14b8a6;  /* teal — primary clinical */
+      --chart-2: #6366f1;  /* indigo */
+      --chart-3: #f59e0b;  /* amber */
+      --chart-4: #ec4899;  /* pink */
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --radius: 10px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg-base);
+      color: var(--text-primary);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      padding: 0 0 48px;
+    }
+    .showcase-header {
+      background: linear-gradient(135deg, #0f1117 0%, #14b8a620 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 32px 40px;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--chart-1);
+      background: #14b8a615;
+      border: 1px solid #14b8a630;
+      border-radius: 999px;
+      padding: 4px 12px;
+      margin-bottom: 12px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+    .subtitle { color: var(--text-muted); font-size: 14px; margin-top: 6px; }
+    main { padding: 40px; max-width: 1100px; margin: 0 auto; }
+
+    /* KPI grid */
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
+    @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+    .kpi-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 16px; }
+    .kpi-value { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+    .kpi-trend { font-size: 12px; font-weight: 500; margin-top: 6px; display: flex; align-items: center; gap: 4px; }
+    .kpi-trend.up { color: var(--success); }
+    .kpi-trend.down { color: var(--warning); }
+
+    /* Charts row */
+    .charts-row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 32px; }
+    @media (max-width: 900px) { .charts-row { grid-template-columns: 1fr; } }
+    .chart-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .chart-header { padding: 20px 24px; border-bottom: 1px solid var(--border); font-size: 14px; font-weight: 600; }
+
+    /* Bar chart — PURE CSS, no library needed */
+    .bar-chart {
+      padding: 24px 24px 0;
+      height: 200px;
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+    }
+    .bar-group { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    /* LEARN: We use height% driven by inline style — the bar itself is just a rounded div.
+       The animation uses CSS transitions so no JavaScript is needed for the visual effect. */
+    .bar {
+      width: 100%;
+      max-width: 40px;
+      border-radius: 4px 4px 0 0;
+      transition: opacity 0.2s;
+      background: var(--chart-1);
+    }
+    .bar:hover { opacity: 0.8; cursor: pointer; }
+    .bar-label { font-size: 10px; color: var(--text-muted); font-weight: 500; padding: 10px 0 20px; text-align: center; }
+
+    /* Breakdown bars */
+    .breakdown { padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+    .breakdown-item-label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px; }
+    .breakdown-item-label span:last-child { font-family: 'JetBrains Mono', monospace; color: var(--text-muted); font-size: 12px; }
+    .spark-track { height: 6px; background: #27272a; border-radius: 999px; overflow: hidden; }
+    .spark-fill { height: 100%; border-radius: 999px; transition: width 1s ease; }
+
+    /* Table */
+    .table-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .table-title { padding: 20px 24px; border-bottom: 1px solid var(--border); font-size: 14px; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; }
+    th { padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; text-align: left; background: #0f1117; border-bottom: 1px solid var(--border); }
+    td { padding: 14px 16px; font-size: 13px; border-bottom: 1px solid #27272a; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--bg-card-hover); }
+    .mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+    .status-badge {
+      display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; padding: 3px 8px; border-radius: 4px;
+    }
+    .status-paid    { background: #22c55e18; color: #22c55e; }
+    .status-pending { background: #f59e0b18; color: #f59e0b; }
+    .status-draft   { background: #3f3f46;   color: #a1a1aa; }
+
+    .showcase-footer { padding: 32px 40px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; margin-top: 40px; }
+    .showcase-footer p { font-size: 13px; color: var(--text-muted); }
+    .showcase-footer strong { color: var(--text-primary); }
+    .tech-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pill { font-size: 10px; font-weight: 600; color: var(--text-muted); background: var(--border); border-radius: 999px; padding: 3px 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+  </style>
+</head>
+<body>
+  <header class="showcase-header">
+    <span class="badge">🏥 MediCore HIS — Feature Showcase #005</span>
+    <h1>Analytics Dashboard</h1>
+    <p class="subtitle">Real-time KPIs, revenue charts, and invoice breakdowns — zero external chart libraries</p>
+  </header>
+
+  <main>
+    <!-- KPI Cards -->
+    <!-- LEARN: Each card uses design tokens directly. The "trend" indicator is purely semantic
+         HTML — coloured via CSS class (up/down) rather than inline styles. -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Collected Revenue</div>
+        <div class="kpi-value">487,200 MAD</div>
+        <div class="kpi-trend up">↑ +14.2% vs last month</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Outstanding</div>
+        <div class="kpi-value">38,500 MAD</div>
+        <div class="kpi-trend down">↓ 12 pending invoices</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Patients</div>
+        <div class="kpi-value">342</div>
+        <div class="kpi-trend up">↑ +3 new today</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Invoices Issued</div>
+        <div class="kpi-value">67</div>
+        <div class="kpi-trend up">↑ This month</div>
+      </div>
+    </div>
+
+    <!-- Charts row -->
+    <div class="charts-row">
+      <!-- Revenue bar chart — PURE CSS implementation -->
+      <div class="chart-card">
+        <div class="chart-header">6-Month Revenue Trend</div>
+        <!-- LEARN: Each bar is computed as (value / max_value) * 100 for the height %.
+             This is exactly what the real app does — a simple Array.map into JSX divs. -->
+        <div class="bar-chart" id="barChart">
+          <!-- Bars injected by JS below for DRYness in demo -->
+        </div>
+      </div>
+
+      <!-- Status breakdown — sparkbars -->
+      <div class="chart-card">
+        <div class="chart-header">Invoice Status</div>
+        <div class="breakdown">
+          <div>
+            <div class="breakdown-item-label"><span>Paid</span><span>54</span></div>
+            <div class="spark-track"><div class="spark-fill" style="width:80%; background: var(--chart-1)"></div></div>
+          </div>
+          <div>
+            <div class="breakdown-item-label"><span>Pending</span><span>9</span></div>
+            <div class="spark-track"><div class="spark-fill" style="width:14%; background: var(--chart-3)"></div></div>
+          </div>
+          <div>
+            <div class="breakdown-item-label"><span>Draft</span><span>3</span></div>
+            <div class="spark-track"><div class="spark-fill" style="width:5%; background: var(--chart-2)"></div></div>
+          </div>
+          <div>
+            <div class="breakdown-item-label"><span>Cancelled</span><span>1</span></div>
+            <div class="spark-track"><div class="spark-fill" style="width:1.5%; background: var(--chart-4)"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Largest Transactions table -->
+    <div class="table-card">
+      <div class="table-title">Top Transactions</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Invoice</th>
+            <th>Date</th>
+            <th>Status</th>
+            <th style="text-align:right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="mono">INV-2026-0067</td><td>Apr 7, 2026</td><td><span class="status-badge status-paid">PAID</span></td><td style="text-align:right;font-weight:600">24,500 MAD</td></tr>
+          <tr><td class="mono">INV-2026-0063</td><td>Apr 3, 2026</td><td><span class="status-badge status-paid">PAID</span></td><td style="text-align:right;font-weight:600">18,200 MAD</td></tr>
+          <tr><td class="mono">INV-2026-0060</td><td>Mar 31, 2026</td><td><span class="status-badge status-pending">PENDING</span></td><td style="text-align:right;font-weight:600">15,800 MAD</td></tr>
+          <tr><td class="mono">INV-2026-0055</td><td>Mar 28, 2026</td><td><span class="status-badge status-paid">PAID</span></td><td style="text-align:right;font-weight:600">12,400 MAD</td></tr>
+          <tr><td class="mono">INV-2026-0051</td><td>Mar 25, 2026</td><td><span class="status-badge status-draft">DRAFT</span></td><td style="text-align:right;font-weight:600">9,750 MAD</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <footer class="showcase-footer">
+    <div>
+      <p>Built by <strong>Oussama Zaki</strong> · MediCore HIS · Session 3</p>
+      <p style="margin-top:4px">Analytics powered by real Prisma/PostgreSQL aggregations</p>
+    </div>
+    <div class="tech-pills">
+      <span class="pill">Next.js 14</span>
+      <span class="pill">NestJS</span>
+      <span class="pill">PostgreSQL</span>
+      <span class="pill">TypeScript</span>
+    </div>
+  </footer>
+
+  <script>
+    // LEARN: The bar chart data would come from BillingApi.getRevenueAnalytics() in the real app.
+    // Here we simulate realistic Moroccan clinic revenue data (MAD currency).
+    const months = [
+      { label: 'Nov', value: 52000 },
+      { label: 'Dec', value: 61000 },
+      { label: 'Jan', value: 44000 },
+      { label: 'Feb', value: 78000 },
+      { label: 'Mar', value: 95000 },
+      { label: 'Apr', value: 87200, current: true },
+    ];
+    const max = Math.max(...months.map(m => m.value));
+    const container = document.getElementById('barChart');
+    months.forEach(({ label, value, current }) => {
+      const pct = Math.round((value / max) * 140); // scale to chart height
+      const group = document.createElement('div');
+      group.className = 'bar-group';
+      group.innerHTML = `
+        <div class="bar" style="height:${pct}px; opacity:${current ? 1 : 0.55}; background:${current ? 'var(--chart-1)' : '#27272a'}" title="${value.toLocaleString()} MAD"></div>
+        <div class="bar-label">${label}</div>
+      `;
+      container.appendChild(group);
+    });
+  </script>
+</body>
+</html>

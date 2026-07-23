@@ -1,0 +1,103 @@
+{
+  "title": "Patient",
+  "collection": "patients",
+  "description": "Full patient document. Demographics, allergies, problem list, documents. Clinical encounters live in encounters collection.",
+  "indexes": [
+    { "fields": { "org_id": 1, "mrn": 1 }, "unique": true },
+    { "fields": { "org_id": 1, "phone": 1 } },
+    { "fields": { "org_id": 1, "national_id": 1 } },
+    { "fields": { "org_id": 1, "name.last": 1, "name.first": 1 } },
+    { "fields": { "$text": { "name.display": "text", "phone": "text", "mrn": "text" } } }
+  ],
+  "type": "object",
+  "required": ["org_id", "name", "created_at"],
+  "properties": {
+    "_id": { "type": "ObjectId" },
+    "org_id": { "type": "ObjectId", "description": "REQUIRED — tenant scope. Matches Organization.id in PostgreSQL" },
+    "mrn": { "type": "string", "example": "ASC-2025-00142", "description": "Unique per org. Generated from PG atomic counter." },
+    "name": {
+      "type": "object",
+      "properties": {
+        "first": { "type": "string" },
+        "last": { "type": "string" },
+        "display": { "type": "string", "description": "Computed: first + last. Used for text search." }
+      }
+    },
+    "dob": { "type": "date" },
+    "gender": { "type": "string", "enum": ["male", "female", "other", "unknown"] },
+    "blood_type": { "type": "string", "enum": ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "unknown"] },
+    "phone": { "type": "string" },
+    "email": { "type": "string" },
+    "national_id": { "type": "string" },
+    "insurance_number": { "type": "string" },
+    "address": {
+      "type": "object",
+      "properties": {
+        "line1": { "type": "string" },
+        "city": { "type": "string" },
+        "region": { "type": "string" },
+        "country": { "type": "string", "default": "MA" }
+      }
+    },
+    "photo_url": { "type": "string" },
+    "emergency_contact": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "relationship": { "type": "string" },
+        "phone": { "type": "string" }
+      }
+    },
+    "preferred_language": { "type": "string", "default": "ar", "enum": ["ar", "fr", "en"] },
+    "allergies": {
+      "type": "array",
+      "description": "Allergy register. Checked against prescriptions at encounter time.",
+      "items": {
+        "properties": {
+          "_id": { "type": "ObjectId" },
+          "substance": { "type": "string" },
+          "substance_normalized": { "type": "string", "description": "Lowercase, for matching against drug catalog" },
+          "type": { "type": "string", "enum": ["drug", "food", "environmental", "other"] },
+          "reaction": { "type": "string" },
+          "severity": { "type": "string", "enum": ["mild", "moderate", "severe"] },
+          "recorded_at": { "type": "date" },
+          "recorded_by": { "type": "ObjectId", "description": "User._id from PG" }
+        }
+      }
+    },
+    "problem_list": {
+      "type": "array",
+      "description": "Active and resolved chronic conditions.",
+      "items": {
+        "properties": {
+          "_id": { "type": "ObjectId" },
+          "condition": { "type": "string" },
+          "icd_code": { "type": "string" },
+          "status": { "type": "string", "enum": ["active", "resolved", "inactive"] },
+          "onset_date": { "type": "date" },
+          "notes": { "type": "string" },
+          "recorded_by": { "type": "ObjectId" }
+        }
+      }
+    },
+    "documents": {
+      "type": "array",
+      "items": {
+        "properties": {
+          "_id": { "type": "ObjectId" },
+          "name": { "type": "string" },
+          "type": { "type": "string", "enum": ["lab_report", "radiology", "referral", "insurance", "discharge", "other"] },
+          "url": { "type": "string" },
+          "file_size_kb": { "type": "number" },
+          "uploaded_at": { "type": "date" },
+          "uploaded_by": { "type": "ObjectId" }
+        }
+      }
+    },
+    "status": { "type": "string", "enum": ["active", "deceased", "transferred"], "default": "active" },
+    "created_at": { "type": "date" },
+    "updated_at": { "type": "date" },
+    "created_by": { "type": "ObjectId" },
+    "updated_by": { "type": "ObjectId" }
+  }
+}
